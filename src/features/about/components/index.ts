@@ -1,0 +1,5 @@
+export { AboutHero } from './about-hero'
+export { AboutNarrative } from './about-narrative'
+export { CapabilitiesSection } from './capabilities-section'
+export { ApproachSection } from './approach-section'
+export { ClosingCtaSection } from './closing-cta-section'

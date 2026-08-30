@@ -1,0 +1,182 @@
+@import 'tailwindcss';
+
+/*
+ * Authentic Media — design tokens.
+ *
+ * Source of truth: reference/DESIGN-SYSTEM.md. Values tagged [MEASURED] there were
+ * sampled from the reference PNGs; do not "tidy" them into rounder numbers.
+ * Colors are kept in the hex form they were measured in so they can be diffed
+ * against the reference document directly.
+ */
+@theme {
+  /* Backgrounds — one continuous radial glow, not four flat bands */
+  --color-background: #07071b;
+  --color-background-elevated: #0d0a22;
+  --color-background-glow: #110b2c;
+  --color-header: #190e39;
+
+  /* Surfaces */
+  --color-surface: #160e35;
+  --color-surface-subtle: #151532;
+  --color-surface-drawer: #16161c;
+  --color-surface-cta-muted: #2a1759;
+  --color-surface-badge: #180f39;
+
+  /* Primary gradient stops. The ramp holds violet through the first half and
+     bends sharply to pink in the last third — a 2-stop gradient loses the bend. */
+  --color-primary-start: #8640ef;
+  --color-primary-mid: #a754f7;
+  --color-primary-end: #d04dbf;
+  --color-primary-tail: #e24dae;
+
+  /* Text */
+  --color-text: #ffffff;
+  --color-text-muted: #a9a7c0;
+  --color-text-subtle: #7c7a96;
+  --color-text-violet: #c9b6f5;
+  /* Eyebrow pill / notice-card copy. [MEASURED] on the WHAT WE OFFER badge
+     (home.png) and both Contact eyebrows — the label is lavender, not white. */
+  --color-text-lavender: #c4b5fd;
+
+  /* Borders */
+  --color-border: rgba(134, 64, 239, 0.18);
+  --color-border-strong: #361b6f;
+  --color-border-secondary: rgba(134, 64, 239, 0.45);
+
+  /* Radii */
+  --radius-pill: 9999px;
+  --radius-card: 24px;
+  --radius-tile: 20px;
+  --radius-input: 14px;
+
+  /* Type */
+  --font-sans:
+    'Outfit', 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Breakpoints — mobile is the measured reference; the rest are inferred */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+}
+
+/*
+ * Non-theme tokens: values consumed by hand-written CSS and inline styles rather
+ * than by generated utilities, so they live on :root instead of in @theme.
+ */
+:root {
+  --gradient-primary: linear-gradient(
+    90deg,
+    var(--color-primary-start) 0%,
+    var(--color-primary-mid) 50%,
+    var(--color-primary-end) 100%
+  );
+
+  /* Longer surfaces reach the deepest pink tail before the edge */
+  --gradient-primary-long: linear-gradient(
+    90deg,
+    var(--color-primary-start) 0%,
+    var(--color-primary-mid) 45%,
+    var(--color-primary-end) 85%,
+    var(--color-primary-tail) 100%
+  );
+
+  --gradient-hero: radial-gradient(
+    120% 80% at 50% 0%,
+    var(--color-header) 0%,
+    var(--color-background-glow) 35%,
+    var(--color-background-elevated) 60%,
+    var(--color-background) 100%
+  );
+
+  --glow-primary: 0 8px 28px rgba(134, 64, 239, 0.35);
+  --glow-card-hover: 0 8px 32px rgba(134, 64, 239, 0.18);
+
+  /* Layout rhythm. The reference gutter is 24px at mobile; wider viewports are
+     inferred and handled by the Container component. */
+  --page-gutter: 24px;
+  --card-padding: 28px;
+  --card-gap: 32px;
+  --section-py: 80px;
+
+  --header-height: 66px;
+
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Headings are tight; body copy is loose. This contrast is a defining trait of
+     the reference — see DESIGN-SYSTEM.md → Typography. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary-mid);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-primary-start);
+    color: var(--color-text);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Gradient accent word inside a heading. Must be applied to a <span> that stays
+     inside the real heading element so the accessible name is not split. */
+  .gradient-text {
+    background: var(--gradient-primary);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+
+  .bg-gradient-primary {
+    background-image: var(--gradient-primary);
+  }
+
+  .bg-gradient-primary-long {
+    background-image: var(--gradient-primary-long);
+  }
+
+  /* Hero backdrop: the violet radial light source behind the header. */
+  .bg-hero-glow {
+    background-image: var(--gradient-hero);
+  }
+
+  .shadow-glow-primary {
+    box-shadow: var(--glow-primary);
+  }
+}

@@ -18,7 +18,15 @@
   /* Surfaces */
   --color-surface: #160e35;
   --color-surface-subtle: #151532;
-  --color-surface-drawer: #16161c;
+  /* Cart drawer surfaces. [MEASURED] on cart(screenshot).png — the drawer is
+     deliberately cooler/greyer than the violet page cards (#160e35), and its
+     three surfaces step apart by only a few points of luminance. */
+  --color-surface-drawer: #1a1a24;
+  --color-surface-drawer-item: #21212b;
+  --color-surface-drawer-footer: #16161f;
+  --color-surface-drawer-panel: #1d1d26;
+  --color-surface-drawer-tile: #2b243f;
+  --color-border-drawer: rgba(255, 255, 255, 0.07);
   --color-surface-cta-muted: #2a1759;
   --color-surface-badge: #180f39;
 
@@ -178,5 +186,47 @@
 
   .shadow-glow-primary {
     box-shadow: var(--glow-primary);
+  }
+}
+
+/*
+ * Overlay entrances. Declared as @theme keyframes so Tailwind's animate-[…]
+ * arbitrary values can reach them. All are motion-safe: gated at the call site,
+ * and the reduced-motion block above collapses their duration regardless — an
+ * overlay's content never depends on an animation completing.
+ *
+ * The cart drawer slides in from the right; the search overlay drops from the
+ * top, since it descends from the header button that opens it.
+ */
+@theme {
+  --animate-slide-in-right: slide-in-right;
+  --animate-slide-in-top: slide-in-top;
+  --animate-fade-in: fade-in;
+
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slide-in-top {
+    from {
+      transform: translateY(-100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }

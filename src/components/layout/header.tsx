@@ -5,6 +5,7 @@ import { NavLink } from 'react-router-dom'
 import { Container } from './container'
 import { Logo } from './logo'
 import { Badge, IconButton } from '@/components/ui'
+import { SearchOverlay } from '@/features/search'
 import { cn } from '@/lib/cn'
 import { PRIMARY_NAV } from '@/routes/paths'
 import { useCart } from '@/stores'
@@ -19,6 +20,7 @@ import { useCart } from '@/stores'
  */
 export function Header() {
   const [isNavOpen, setIsNavOpen] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
   const { itemCount, openCart } = useCart()
 
   useEffect(() => {
@@ -63,11 +65,14 @@ export function Header() {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <IconButton
-            label="Search"
+            label="Search services"
+            aria-expanded={isSearchOpen}
             icon={<Search className="size-5" />}
-            // The search overlay was never captured open; the Search feature
-            // session owns it.
-            onClick={() => undefined}
+            onClick={() => {
+              // Two overlays at once would fight over the focus trap.
+              setIsNavOpen(false)
+              setIsSearchOpen(true)
+            }}
           />
 
           <IconButton
@@ -122,6 +127,10 @@ export function Header() {
           </Container>
         </nav>
       )}
+
+      {/* Rendered from the header because the button that opens it lives here,
+          and the sheet drops from the header edge. */}
+      <SearchOverlay isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
     </header>
   )
 }

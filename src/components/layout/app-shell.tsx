@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 
 import { Footer } from './footer'
 import { Header } from './header'
+import { CartDrawer } from '@/features/cart'
 
 /**
  * The persistent page frame: header, routed main content, footer.
@@ -41,6 +42,10 @@ export function AppShell() {
       </main>
 
       <Footer />
+
+      {/* Mounted once at the shell so the cart can open over any route — it is
+          an overlay, not a page (SCREEN-MAP.md → Cart). */}
+      <CartDrawer />
     </div>
   )
 }

@@ -17,7 +17,12 @@ export function MicroServiceCard({ service }: ServiceCardProps) {
   const { isAdded, add } = useAddToCart(service)
 
   return (
-    <Card interactive className="flex h-full flex-col">
+    <Card
+      id={`service-${service.id}`}
+      interactive
+      // scroll-mt clears the sticky header when search deep-links to this card.
+      className="flex h-full scroll-mt-24 flex-col"
+    >
       {isServiceIconName(service.icon) && <ServiceIcon name={service.icon} tile />}
 
       <h3 className="mt-6 text-[19px]">{service.title}</h3>

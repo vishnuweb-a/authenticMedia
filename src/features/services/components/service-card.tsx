@@ -19,7 +19,12 @@ export function ServiceCard({ service }: ServiceCardProps) {
   const { isAdded, add } = useAddToCart(service)
 
   return (
-    <Card interactive className="relative flex h-full flex-col">
+    <Card
+      id={`service-${service.id}`}
+      interactive
+      // scroll-mt clears the sticky header when search deep-links to this card.
+      className="relative flex h-full scroll-mt-24 flex-col"
+    >
       {service.badge && (
         // Measured at ~76×24px CSS, inset ~17px from the card's top-right on the
         // Branding & Content card — the only badged entry in the capture.

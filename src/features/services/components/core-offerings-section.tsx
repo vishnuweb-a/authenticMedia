@@ -1,7 +1,8 @@
 import { Section, SectionHeading } from '@/components/layout'
 import { GradientText } from '@/components/ui'
-import { CORE_SERVICES } from '../data/catalogue.data'
 import { SERVICES_CONTENT } from '../data/services.data'
+import { useCatalogue } from '../hooks/use-catalogue'
+import { CatalogueEmpty, CatalogueError, CatalogueSkeleton } from './catalogue-states'
 import { ServiceCard } from './service-card'
 
 /**
@@ -19,6 +20,7 @@ import { ServiceCard } from './service-card'
  */
 export function CoreOfferingsSection() {
   const { coreOfferings } = SERVICES_CONTENT
+  const { services, isLoading, error } = useCatalogue('core')
 
   return (
     <Section className="py-0 pb-16 md:pb-20 lg:pb-24">
@@ -32,13 +34,21 @@ export function CoreOfferingsSection() {
         description={coreOfferings.description}
       />
 
-      <ul className="mt-[74px] grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {CORE_SERVICES.map((service) => (
-          <li key={service.id} className="flex">
-            <ServiceCard service={service} />
-          </li>
-        ))}
-      </ul>
+      {isLoading ? (
+        <CatalogueSkeleton count={6} />
+      ) : error ? (
+        <CatalogueError message={error} />
+      ) : services.length === 0 ? (
+        <CatalogueEmpty />
+      ) : (
+        <ul className="mt-[74px] grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {services.map((service) => (
+            <li key={service.id} className="flex">
+              <ServiceCard service={service} />
+            </li>
+          ))}
+        </ul>
+      )}
     </Section>
   )
 }

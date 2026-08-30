@@ -23,7 +23,7 @@ import { useDialogBehavior } from '@/hooks'
  */
 export function CartDrawer() {
   const { items, total, itemCount, isOpen, removeItem, closeCart } = useCart()
-  const { status, error, pay, reset } = useCheckout()
+  const { status, error, order, pay, reset } = useCheckout()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
@@ -71,7 +71,7 @@ export function CartDrawer() {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-[25px] py-6">
           {status === 'succeeded' ? (
-            <CartPaymentSuccess onDone={closeCart} />
+            <CartPaymentSuccess onDone={closeCart} order={order} />
           ) : itemCount === 0 ? (
             <CartEmptyState onBrowse={closeCart} />
           ) : (

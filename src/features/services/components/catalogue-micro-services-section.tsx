@@ -1,7 +1,8 @@
 import { Section, SectionHeading } from '@/components/layout'
 import { GradientText } from '@/components/ui'
-import { MICRO_SERVICES } from '../data/catalogue.data'
 import { SERVICES_CONTENT } from '../data/services.data'
+import { useCatalogue } from '../hooks/use-catalogue'
+import { CatalogueEmpty, CatalogueError, CatalogueSkeleton } from './catalogue-states'
 import { MicroServiceCard } from './micro-service-card'
 
 /**
@@ -15,6 +16,7 @@ import { MicroServiceCard } from './micro-service-card'
  */
 export function CatalogueMicroServicesSection() {
   const { microServices } = SERVICES_CONTENT
+  const { services, isLoading, error } = useCatalogue('micro')
 
   return (
     <Section className="pt-0">
@@ -30,13 +32,21 @@ export function CatalogueMicroServicesSection() {
         description={microServices.description}
       />
 
-      <ul className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {MICRO_SERVICES.map((service) => (
-          <li key={service.id} className="flex">
-            <MicroServiceCard service={service} />
-          </li>
-        ))}
-      </ul>
+      {isLoading ? (
+        <CatalogueSkeleton count={3} />
+      ) : error ? (
+        <CatalogueError message={error} />
+      ) : services.length === 0 ? (
+        <CatalogueEmpty />
+      ) : (
+        <ul className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {services.map((service) => (
+            <li key={service.id} className="flex">
+              <MicroServiceCard service={service} />
+            </li>
+          ))}
+        </ul>
+      )}
     </Section>
   )
 }

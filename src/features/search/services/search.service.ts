@@ -1,4 +1,4 @@
-import { ALL_SERVICES } from '@/features/services'
+import { catalogueRepository } from '@/services'
 import { err, ok, type ServiceResult } from '@/services'
 import type { Service } from '@/types'
 import type { SearchResult } from '../types/search.types'
@@ -19,10 +19,6 @@ export interface SearchService {
 
 /** Queries shorter than this match too much of the catalogue to be useful. */
 export const MIN_QUERY_LENGTH = 2
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 /**
  * Field weights. A title hit should always outrank a description hit for the
@@ -98,11 +94,16 @@ function createMockSearchService(): SearchService {
         return err('query_too_short', `Type at least ${MIN_QUERY_LENGTH} characters to search.`)
       }
 
-      // Stands in for network latency so the overlay's pending state is real
-      // rather than a state that only exists in theory.
-      await delay(220)
+      // The catalogue comes from the repository, so search reflects whatever
+      // Supabase holds rather than a second, independently-editable copy
+      // (CLAUDE.md §19 — one authoritative catalogue).
+      const catalogue = await catalogueRepository.listServices()
 
-      const results = ALL_SERVICES.map((service) => {
+      if (!catalogue.ok) {
+        return err('catalogue_unavailable', catalogue.error.message)
+      }
+
+      const results = catalogue.data.map((service) => {
         const match = matchService(service, term)
         return match ? { service, match } : undefined
       })

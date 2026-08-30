@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { Section, SectionHeading } from '@/components/layout'
 import { GradientText } from '@/components/ui'
-import { HOME_CORE_SERVICES, ServiceCard } from '@/features/services'
+import { CatalogueError, CatalogueSkeleton, ServiceCard, useCatalogue } from '@/features/services'
 import { HOME_CONTENT } from '../data/home.data'
 
 /**
@@ -17,6 +17,10 @@ import { HOME_CONTENT } from '../data/home.data'
  */
 export function CoreServicesSection() {
   const { coreServices, catalogueLink } = HOME_CONTENT
+  const { services, isLoading, error } = useCatalogue('core')
+
+  // Home shows a curated six-entry subset; Services renders the tier in full.
+  const featured = services.slice(0, 6)
 
   return (
     <Section>
@@ -30,13 +34,19 @@ export function CoreServicesSection() {
         description={coreServices.description}
       />
 
-      <ul className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {HOME_CORE_SERVICES.map((service) => (
-          <li key={service.id} className="flex">
-            <ServiceCard service={service} />
-          </li>
-        ))}
-      </ul>
+      {isLoading ? (
+        <CatalogueSkeleton count={6} />
+      ) : error ? (
+        <CatalogueError message={error} />
+      ) : (
+        <ul className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {featured.map((service) => (
+            <li key={service.id} className="flex">
+              <ServiceCard service={service} />
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-14 border-y border-border/60 py-7 text-center">
         <Link

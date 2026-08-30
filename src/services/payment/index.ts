@@ -7,9 +7,13 @@ export type {
   PaymentService,
   PaymentStatus,
 } from './types'
+export { airpayAdapter } from './airpay-adapter'
 
 /**
- * The active payment implementation. The Airpay integration will replace this
- * binding — via a backend — without changing the cart UI.
+ * The active payment implementation.
+ *
+ * Bound to the development mock: payments are simulated and no money moves.
+ * Switching to Airpay is a change to this binding only — see airpay-adapter.ts
+ * for the intended topology.
  */
 export const paymentService: PaymentService = mockPaymentService

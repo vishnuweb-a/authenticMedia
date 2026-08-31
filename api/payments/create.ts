@@ -83,9 +83,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   // pending_payment. Refuse here instead: before the order row, before OAuth.
   const contact = normaliseContact(body?.contact)
   if (!hasContact(contact)) {
+    // Presence of the RAW fields, never their values (§9.8). Both are false
+    // when the client omitted the block entirely; a true here with a rejection
+    // means the value arrived but could not be normalised, which is a very
+    // different bug and was indistinguishable while these were hardcoded.
+    const raw = body?.contact
+    const source = raw !== null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
     logEvent('payment.create.contact_missing', {
-      emailPresent: false,
-      contactPresent: false,
+      emailPresent: asString(source['email']) !== '',
+      contactPresent: asString(source['phone']) !== '',
     })
     res.status(400).json({ error: 'contact_required' })
     return

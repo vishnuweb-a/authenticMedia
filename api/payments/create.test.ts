@@ -206,6 +206,64 @@ describe('missing contact is rejected before Airpay is called', () => {
     expect(captured.code).toBe(400)
     expect(rpc.calls).toEqual([])
   })
+
+  /**
+   * The rejection log reported `emailPresent: false, contactPresent: false` as
+   * hardcoded literals, so it said the same thing whether the client omitted
+   * the block or sent a value that would not normalise. That made a real
+   * production rejection impossible to diagnose from the log alone.
+   */
+  it('logs the true presence of the raw fields, never their values', async () => {
+    const lines: string[] = []
+    const spy = vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+      lines.push(String(line))
+    })
+
+    try {
+      const { res, captured } = mockRes()
+      await handler(
+        post({
+          serviceSlugs: ['a-service'],
+          guestToken: GUEST,
+          // Present but unusable: the diagnosis the old log could not express.
+          contact: { email: 'not-an-address', phone: '' },
+        }),
+        res,
+      )
+      expect(captured.code).toBe(400)
+
+      const event = lines.map((l) => JSON.parse(l) as Record<string, unknown>)
+        .find((e) => e['event'] === 'payment.create.contact_missing')
+
+      expect(event).toBeDefined()
+      expect(event?.['emailPresent']).toBe(true)
+      expect(event?.['contactPresent']).toBe(false)
+      // Presence only — the value itself must never be logged (§9.8).
+      expect(lines.join(' ')).not.toContain('not-an-address')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('reports both absent when the client sent no contact block', async () => {
+    const lines: string[] = []
+    const spy = vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+      lines.push(String(line))
+    })
+
+    try {
+      const { res } = mockRes()
+      await handler(post({ serviceSlugs: ['a-service'], guestToken: GUEST }), res)
+
+      const event = lines.map((l) => JSON.parse(l) as Record<string, unknown>)
+        .find((e) => e['event'] === 'payment.create.contact_missing')
+
+      expect(event?.['emailPresent']).toBe(false)
+      expect(event?.['contactPresent']).toBe(false)
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })
 
 describe('pricing stays server-authoritative', () => {

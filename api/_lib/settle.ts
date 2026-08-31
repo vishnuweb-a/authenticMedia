@@ -3,6 +3,7 @@ import { verifySecureHash } from './airpay-crypto.js'
 import { isLiveMid, loadAirpayConfig, type AirpayConfig } from './config.js'
 import { findOrderByRef, settleOrderRow } from './db.js'
 import { logEvent } from './log.js'
+import { merchantForOrderRef } from './order-ref.js'
 
 /**
  * Settlement — the ONLY place an order may be marked paid (AIPAY-DOCS §10).
@@ -78,7 +79,19 @@ export async function settleOrder(
   ) => Promise<VerifiedTransaction | null> = verifyTransaction,
 ): Promise<SettleResult> {
   const { orderRef } = payload
-  const config = injectedConfig ?? loadAirpayConfig()
+
+  // The merchant is recovered from OUR OWN order reference (§2.4) — the string
+  // the server generated at checkout and stored on the row. Never from the
+  // callback body, never from the request, never from the environment's
+  // current default, which may since have been switched to the other merchant
+  // while this order was still pending.
+  //
+  // This is what makes all three settlement paths — callback, success-page
+  // poll and reconciliation sweep — reach for the SAME credentials that
+  // created the payment. It selects which merchant is ASKED; Order
+  // Confirmation still decides, and an order the asked merchant never issued
+  // simply comes back inconclusive (§11.3).
+  const config = injectedConfig ?? loadAirpayConfig(merchantForOrderRef(orderRef))
 
   // 1. Load the order.
   const order = await findOrderByRef(orderRef)

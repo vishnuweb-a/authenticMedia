@@ -18,6 +18,7 @@ import type { AirpayConfig } from './config.js'
 
 /** Non-secret fixture values. Never a real credential. */
 const config: AirpayConfig = {
+  merchant: 1,
   mid: '366950',
   clientId: 'test-client',
   secretKey: 'test-oauth-secret',

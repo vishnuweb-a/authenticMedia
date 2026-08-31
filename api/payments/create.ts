@@ -1,7 +1,7 @@
 import { buildSignedEnvelope } from '../_lib/airpay-crypto.js'
 import { getAccessToken } from '../_lib/airpay.js'
 import { hasContact, normaliseContact } from '../_lib/contact.js'
-import { HOSTED_PAYMENT_URL, loadAirpayConfig } from '../_lib/config.js'
+import { activeMerchant, HOSTED_PAYMENT_URL, loadAirpayConfig } from '../_lib/config.js'
 import { getServiceClient } from '../_lib/db.js'
 import { noStore, type ApiRequest, type ApiResponse } from '../_lib/http.js'
 import { logEvent } from '../_lib/log.js'
@@ -97,17 +97,28 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return
   }
 
+  // ⚠ The merchant is chosen HERE and only here (§2.4), from a server-side
+  // environment variable. Nothing in the request influences it: the browser
+  // cannot name a merchant, cannot override one, and cannot supply a
+  // credential. An unset or unrecognised value keeps the production-proven
+  // merchant 1.
+  const merchant = activeMerchant()
+
   let config
   try {
-    config = loadAirpayConfig()
+    config = loadAirpayConfig(merchant)
   } catch {
     // Names only — never the value, and never which credential (§9.8).
-    logEvent('payment.create.misconfigured')
+    logEvent('payment.create.misconfigured', { merchant })
     res.status(503).json({ error: 'payments_unavailable' })
     return
   }
 
-  const orderRef = generateOrderRef()
+  // The reference carries the merchant (§2.4). Generated with it, stored with
+  // it, and decoded back out by every settlement path — so an order settles
+  // against the merchant that created it even if the active merchant is
+  // switched while the order is still pending.
+  const orderRef = generateOrderRef(Date.now(), merchant)
 
   try {
     const supabase = getServiceClient()
@@ -147,6 +158,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     // Presence only — never the address or the number (§9.8).
     logEvent('payment.initiated', {
       orderRef,
+      merchant,
       emailPresent: contact.email !== '',
       contactPresent: contact.phone !== '',
     })

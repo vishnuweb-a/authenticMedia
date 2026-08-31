@@ -26,6 +26,7 @@ vi.mock('./db.js', () => ({
 const { settleOrder } = await import('./settle.js')
 
 const config: AirpayConfig = {
+  merchant: 1,
   mid: '366950',
   clientId: 'c',
   secretKey: 's',

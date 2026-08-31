@@ -29,6 +29,17 @@ import type { ApiRequest, ApiResponse } from '../../../_lib/http.js'
  * Airpay's Order Confirmation.
  */
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+  // ⚠ This route is MERCHANT 1's receiver and nothing else (§2.4). The merchant
+  // is stated by the route, not read from the payload, because the decryption
+  // key is derived from that merchant's credentials and the order reference is
+  // sealed inside the envelope.
+  //
+  // Merchant 2 (MID 362380) has NO receiver in this application: Airpay posts
+  // its callbacks straight to https://kkchat.in/callback/cpm/arp/collection.
+  // A delivery for that merchant arriving here is rejected by the merchant
+  // check before its envelope is ever opened, and is never relayed — so
+  // KKChat -> AuthenticMedia -> KKChat cannot be constructed (§13.8).
+  //
   // Deliberately no method gate. Airpay posts here, and the browser leg may
   // arrive as a GET; answering 405 to either is the failure this route exists
   // to fix. An unrecognised method still parses to nothing and gets a safe 2xx.

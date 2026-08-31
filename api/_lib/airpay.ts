@@ -1,5 +1,5 @@
 import { buildEnvelope, buildSignedEnvelope, decrypt } from './airpay-crypto.js'
-import { OAUTH_URL, type AirpayConfig } from './config.js'
+import { OAUTH_URL, type AirpayConfig, type MerchantId } from './config.js'
 import { logEvent } from './log.js'
 import { FIELD_ALIASES, pick, walkFields } from './walk.js'
 
@@ -65,14 +65,20 @@ interface CachedToken {
  * Tokens live 300 s; cache with a 60 s safety margin so one cannot expire in
  * flight (§6). On serverless a warm instance reuses it and a cold start mints
  * a new one — no shared infrastructure needed.
+ *
+ * ⚠ Keyed BY MERCHANT (§2.4). A single shared slot would hand merchant 2 a
+ * token minted with merchant 1's credentials the moment a warm instance served
+ * both — Order Confirmation would then be asked about merchant 2's order under
+ * merchant 1's authority, and the answer would be inconclusive at best. The
+ * key is the merchant id, never the credential.
  */
-let cached: CachedToken | null = null
+const cached = new Map<MerchantId, CachedToken>()
 const TOKEN_TTL_MS = 300_000
 const TOKEN_MARGIN_MS = 60_000
 
 /** Exposed for tests; never called in request paths. */
 export function resetTokenCache(): void {
-  cached = null
+  cached.clear()
 }
 
 /**
@@ -86,7 +92,8 @@ export function resetTokenCache(): void {
  */
 export async function getAccessToken(config: AirpayConfig): Promise<string | null> {
   const now = Date.now()
-  if (cached && cached.expiresAt > now) return cached.token
+  const hit = cached.get(config.merchant)
+  if (hit && hit.expiresAt > now) return hit.token
 
   // The credentials travel INSIDE encdata, not as plain form fields (§6).
   const envelope = buildEnvelope(
@@ -187,8 +194,8 @@ export async function getAccessToken(config: AirpayConfig): Promise<string | nul
     return null
   }
 
-  cached = { token, expiresAt: now + TOKEN_TTL_MS - TOKEN_MARGIN_MS }
-  logEvent('airpay.oauth.issued')
+  cached.set(config.merchant, { token, expiresAt: now + TOKEN_TTL_MS - TOKEN_MARGIN_MS })
+  logEvent('airpay.oauth.issued', { merchant: config.merchant })
   return token
 }
 

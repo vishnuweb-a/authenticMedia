@@ -129,6 +129,94 @@ describe('OAuth (§6)', () => {
     expect(await getAccessToken(config)).toBeNull()
   })
 
+  // ⚠ PROVEN in production: the grant arrives as the native v4 envelope
+  // (§9.3), not as the plain body §6 describes. Logged as
+  // `no_token reason=absent fieldNames=merchant_id,response` — the token was
+  // not missing, it was sealed.
+  describe('the native v4 envelope on the token grant (§9.3, §11.1)', () => {
+    it('decrypts the confirmed production shape and issues the token', async () => {
+      const sealed = encrypt(JSON.stringify({ data: { access_token: 'tok-sealed' } }), config)
+      fetchMock.mockResolvedValue(respond({ merchant_id: config.mid, response: sealed }))
+      expect(await getAccessToken(config)).toBe('tok-sealed')
+    })
+
+    it('§6.2 — finds the token when the sealed plaintext double-encodes data', async () => {
+      const sealed = encrypt(
+        JSON.stringify({ data: JSON.stringify({ access_token: 'tok-sealed-nested' }) }),
+        config,
+      )
+      fetchMock.mockResolvedValue(respond({ merchant_id: config.mid, response: sealed }))
+      expect(await getAccessToken(config)).toBe('tok-sealed-nested')
+    })
+
+    it('§6.1 — a sealed REJECTION is still a rejection, not a token', async () => {
+      const sealed = encrypt(
+        JSON.stringify({
+          status_code: 200,
+          status: 'success',
+          data: { success: false, msg: 'Invalid client id or secret' },
+        }),
+        config,
+      )
+      fetchMock.mockResolvedValue(respond({ merchant_id: config.mid, response: sealed }))
+      expect(await getAccessToken(config)).toBeNull()
+    })
+
+    it('NEVER accepts the raw envelope value as a token', async () => {
+      // The `response` blob is ciphertext. If it could not be opened it is not
+      // a credential, and must never be forwarded as one.
+      const sealed = 'a1b2c3d4e5f60718' + Buffer.from('not-really-ciphertext').toString('base64')
+      fetchMock.mockResolvedValue(respond({ merchant_id: config.mid, response: sealed }))
+
+      const token = await getAccessToken(config)
+      expect(token).toBeNull()
+      expect(token).not.toBe(sealed)
+    })
+
+    it('ends the read on an unreadable envelope rather than falling back', async () => {
+      // §9.6: falling through to the outer fields is exactly what lets a
+      // forger pair a captured envelope with plaintext of their own.
+      fetchMock.mockResolvedValue(
+        respond({
+          merchant_id: config.mid,
+          response: '0123456789abcdefNOT-VALID-CIPHERTEXT',
+          access_token: 'attacker-supplied',
+        }),
+      )
+      expect(await getAccessToken(config)).toBeNull()
+    })
+
+    it('rejects an envelope addressed to another merchant before opening it', async () => {
+      const sealed = encrypt(JSON.stringify({ data: { access_token: 'tok-other' } }), config)
+      fetchMock.mockResolvedValue(respond({ merchant_id: '999999', response: sealed }))
+      expect(await getAccessToken(config)).toBeNull()
+    })
+
+    it('logs only shape categories for a sealed grant — never the blob or the token', async () => {
+      const logs: string[] = []
+      const spy = vi.spyOn(console, 'log').mockImplementation((line: string) => {
+        logs.push(line)
+      })
+
+      const sealed = '0123456789abcdefNOT-VALID-CIPHERTEXT'
+      fetchMock.mockResolvedValue(respond({ merchant_id: config.mid, response: sealed }))
+      expect(await getAccessToken(config)).toBeNull()
+      spy.mockRestore()
+
+      const entry = logs
+        .map((l) => JSON.parse(l) as Record<string, unknown>)
+        .find((e) => e['event'] === 'airpay.oauth.no_token')
+      expect(entry?.['reason']).toBe('envelope_unreadable')
+      // §9.8 — names and categories only. The ciphertext is never logged.
+      expect(logs.join('')).not.toContain(sealed)
+    })
+
+    it('leaves an un-enveloped grant on its existing path', async () => {
+      fetchMock.mockResolvedValue(respond({ data: { access_token: 'tok-plain' } }))
+      expect(await getAccessToken(config)).toBe('tok-plain')
+    })
+  })
+
   it('caches the token across calls', async () => {
     fetchMock.mockResolvedValue(respond({ data: { access_token: 'tok' } }))
     await getAccessToken(config)

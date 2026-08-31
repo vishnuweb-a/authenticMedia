@@ -117,6 +117,48 @@ export async function getAccessToken(config: AirpayConfig): Promise<string | nul
     return null
   }
 
+  // ⚠ PROVEN in production — the grant comes back as the native v4 envelope
+  // (§9.3), `{ merchant_id, response: "<16 hex IV><base64 ciphertext>" }`, and
+  // NOT as the plain `{ data: { access_token } }` body §6 describes. Observed
+  // as `airpay.oauth.no_token reason=absent fieldNames=merchant_id,response`:
+  // the token was never missing, it was sealed. §11.1 already establishes that
+  // the gateway applies this envelope inconsistently across endpoints, so
+  // detect it and decrypt only when present, exactly as verifyTransaction does.
+  //
+  // The order of the two checks below is §9.6's and is load-bearing: the
+  // merchant is checked BEFORE the envelope is opened, never after.
+  let envelopeState: 'absent' | 'decrypted' | 'unreadable' = 'absent'
+  if (parsed !== null && typeof parsed === 'object') {
+    const sealed = (parsed as Record<string, unknown>)['response']
+    if (typeof sealed === 'string' && sealed.length > 16) {
+      // Checked only when actually stated: silence is not a mismatch, and a
+      // mismatch is never opened (§11.2). `merchant_id` here is the envelope's,
+      // not the payload's MERCID (§9.7).
+      const statedMerchant = (parsed as Record<string, unknown>)['merchant_id']
+      if (statedMerchant !== undefined && String(statedMerchant) !== config.mid) {
+        logEvent('airpay.oauth.no_token', { reason: 'merchant_mismatch' })
+        return null
+      }
+
+      const plaintext = decrypt(sealed, config)
+      if (plaintext === null) {
+        // Sealed under a key we do not hold, or corrupted. Either way this is
+        // NOT a token — end the read rather than falling back to the outer
+        // fields, which is what would let a captured envelope be paired with
+        // plaintext of someone else's choosing (§9.6).
+        logEvent('airpay.oauth.no_token', { reason: 'envelope_unreadable' })
+        return null
+      }
+      try {
+        parsed = JSON.parse(plaintext) as unknown
+        envelopeState = 'decrypted'
+      } catch {
+        logEvent('airpay.oauth.no_token', { reason: 'envelope_unreadable' })
+        return null
+      }
+    }
+  }
+
   // Walk the structure: `data` may arrive as a JSON string (§6.2), and the
   // token appears under several aliases.
   const fields = walkFields(parsed)
@@ -125,7 +167,7 @@ export async function getAccessToken(config: AirpayConfig): Promise<string | nul
   if (success !== undefined && /^(false|0)$/i.test(success)) {
     // The reason lives in data.msg. It is not logged: it is a gateway string
     // about our own credentials, and the category is what diagnoses this.
-    logEvent('airpay.oauth.no_token', { reason: 'rejected' })
+    logEvent('airpay.oauth.no_token', { reason: 'rejected', envelope: envelopeState })
     return null
   }
 
@@ -139,6 +181,7 @@ export async function getAccessToken(config: AirpayConfig): Promise<string | nul
       reason: 'absent',
       status: response.status,
       contentType: response.contentType ?? 'unknown',
+      envelope: envelopeState,
       fieldNames: [...fields.keys()].slice(0, 24).join(','),
     })
     return null

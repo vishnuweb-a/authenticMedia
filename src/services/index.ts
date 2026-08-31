@@ -21,6 +21,8 @@ export type {
 export {
   createAirpayPayment,
   fetchOrderStatus,
+  openPaymentWindow,
+  PAYMENT_WINDOW_NAME,
   paymentService,
   submitToAirpay,
 } from './payment'

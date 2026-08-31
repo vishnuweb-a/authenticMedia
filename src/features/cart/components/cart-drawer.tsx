@@ -6,6 +6,7 @@ import { CartEmptyState } from './cart-empty-state'
 import { CheckoutContactFields } from './checkout-contact-fields'
 import { CartLineItem } from './cart-line-item'
 import { CartSummary } from './cart-summary'
+import { CheckoutAwaitingPanel } from './checkout-awaiting-panel'
 import { useCheckout } from '../hooks/use-checkout'
 import { useDialogBehavior } from '@/hooks'
 
@@ -23,7 +24,8 @@ import { useDialogBehavior } from '@/hooks'
  */
 export function CartDrawer() {
   const { items, total, itemCount, isOpen, removeItem, closeCart } = useCart()
-  const { status, error, contact, contactErrors, setContactValue, pay, reset } = useCheckout()
+  const { status, error, contact, contactErrors, setContactValue, pay, reset, awaiting } =
+    useCheckout()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
@@ -31,9 +33,14 @@ export function CartDrawer() {
 
   // A closed-and-reopened drawer should not still be showing the previous
   // attempt's success or failure message.
+  //
+  // ⚠ Never while a payment is open in another window (§14.3). Resetting would
+  // discard the reference this tab is waiting on, and the shopper would come
+  // back from a real payment to a cart that had forgotten about it. The poll
+  // must survive an accidental Esc or backdrop click.
   useEffect(() => {
-    if (!isOpen) reset()
-  }, [isOpen, reset])
+    if (!isOpen && !awaiting) reset()
+  }, [isOpen, awaiting, reset])
 
   if (!isOpen) return null
 
@@ -73,7 +80,15 @@ export function CartDrawer() {
           {/* There is no success state here: paying redirects to Airpay's
               hosted page, and the outcome is confirmed on /order-success after
               the server verifies it with Airpay (AIPAY-DOCS §14.1). */}
-          {itemCount === 0 ? (
+          {awaiting ? (
+            /* The shopper is paying in a separate window because Airpay's
+               dashboard sends that window to KKChat rather than back here
+               (§8.1, §14.3). This tab waits and reports the verified outcome. */
+            <CheckoutAwaitingPanel
+              orderRef={awaiting.orderRef}
+              accessToken={awaiting.accessToken}
+            />
+          ) : itemCount === 0 ? (
             <CartEmptyState onBrowse={closeCart} />
           ) : (
             <div className="flex flex-col gap-6">
@@ -95,8 +110,10 @@ export function CartDrawer() {
           )}
         </div>
 
-        {/* The floor is meaningless with nothing to pay for. */}
-        {itemCount > 0 && (
+        {/* The floor is meaningless with nothing to pay for, and a second Pay
+            button while a payment is already open in another window is how a
+            shopper ends up paying twice. */}
+        {itemCount > 0 && !awaiting && (
           <CartSummary total={total} status={status} error={error} onPay={pay} />
         )}
       </div>

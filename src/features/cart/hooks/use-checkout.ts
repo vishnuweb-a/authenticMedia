@@ -1,6 +1,11 @@
 import { useCallback, useState } from 'react'
 
-import { createAirpayPayment, submitToAirpay } from '@/services'
+import {
+  createAirpayPayment,
+  openPaymentWindow,
+  PAYMENT_WINDOW_NAME,
+  submitToAirpay,
+} from '@/services'
 import { useCart } from '@/stores'
 import type { CheckoutStatus } from '../types/cart.types'
 import {
@@ -21,6 +26,15 @@ export interface UseCheckoutResult {
   setContactValue: (field: keyof CheckoutContactValues, value: string) => void
   pay: () => Promise<void>
   reset: () => void
+  /**
+   * Set only while the shopper is paying in a SEPARATE window and this tab is
+   * waiting for them (§14.3). The drawer renders a waiting panel and polls this
+   * order; null means the ordinary full-tab hand-off, where this tab is
+   * navigating away and there is nothing to wait for.
+   *
+   * ⚠ Carries no claim about the payment — only which order to ask about.
+   */
+  awaiting: { readonly orderRef: string; readonly accessToken: string } | null
 }
 
 /**
@@ -42,6 +56,22 @@ export interface UseCheckoutResult {
  * Confirmation, and reported on the /order-success page. A redirect proves only
  * that a browser was pointed at a URL (§14.1).
  *
+ * ⚠ Two hand-off styles, chosen by the SERVER (§8.1, §14.3):
+ *
+ *   returnsToSite  → the original full-tab POST. Airpay's dashboard Response
+ *                    URL for that merchant points back here, so Airpay itself
+ *                    brings the shopper home. Merchant 1, unchanged.
+ *
+ *   !returnsToSite → the hosted page opens in a SEPARATE window and this tab
+ *                    stays put, polling the order. Airpay's dashboard Response
+ *                    URL for merchant 2 points at KKChat — the client's
+ *                    requirement, and not ours to change — so Airpay will land
+ *                    the paying window on KKChat and never navigate it back.
+ *                    Keeping this tab is the only way the shopper returns.
+ *
+ * Neither style is evidence of anything. Both end at the same authoritative
+ * poll of /api/orders/status.
+ *
  * The cart is deliberately NOT cleared here. The shopper has not paid yet, and
  * clearing it would lose their basket if they abandoned the gateway or the
  * payment failed.
@@ -53,12 +83,14 @@ export function useCheckout(): UseCheckoutResult {
   const [contact, setContact] = useState<CheckoutContactValues>(EMPTY_CONTACT)
   const [contactErrors, setContactErrors] = useState<CheckoutContactErrors>({})
   const [hasAttempted, setHasAttempted] = useState(false)
+  const [awaiting, setAwaiting] = useState<UseCheckoutResult['awaiting']>(null)
 
   const reset = useCallback(() => {
     setStatus('idle')
     setError(null)
     setContactErrors({})
     setHasAttempted(false)
+    setAwaiting(null)
   }, [])
 
   const setContactValue = useCallback(
@@ -88,6 +120,13 @@ export function useCheckout(): UseCheckoutResult {
     setStatus('pending')
     setError(null)
 
+    // ⚠ Opened BEFORE the await (§14.3). A popup blocker permits a window
+    // opened during the click gesture and refuses one opened after the stack
+    // has yielded, so this cannot wait to find out whether it is needed. If the
+    // server turns out to want a full-tab hand-off, the window is closed again
+    // a few lines below and the shopper never sees it.
+    const paymentWindow = openPaymentWindow()
+
     const { firstName, lastName } = splitName(contact.name)
 
     const created = await createAirpayPayment({
@@ -101,17 +140,42 @@ export function useCheckout(): UseCheckoutResult {
     })
 
     if (!created.ok) {
+      paymentWindow?.close()
       setError(created.error.message)
       setStatus('failed')
       return
     }
 
-    // Hand off to the hosted page. The fields are forwarded verbatim; the
-    // browser performs no cryptography and holds no credential (§7.6).
-    // Navigation ends this hook's involvement — status stays 'pending' so the
+    const handoff = created.data
+
+    // The full-tab hand-off — merchant 1, exactly as before. Airpay returns
+    // this browser to /order-success itself, so no window is needed.
+    // Navigation ends this hook's involvement; status stays 'pending' so the
     // pill keeps its loading state until the page unloads.
-    submitToAirpay(created.data)
+    if (handoff.returnsToSite) {
+      paymentWindow?.close()
+      submitToAirpay(handoff)
+      return
+    }
+
+    // Airpay will NOT bring this browser back (§14.3). If the window was
+    // refused there is nowhere to pay but this tab: take the full-tab hand-off
+    // rather than stranding the shopper on a dead button. They then finish on
+    // KKChat's page and reach /order-success from their emailed link or by
+    // returning to the site — worse, but never a lost payment, because
+    // settlement does not depend on this browser at all.
+    if (!paymentWindow) {
+      submitToAirpay(handoff)
+      return
+    }
+
+    // POST into the window we still own, and hold this tab. The order is now
+    // this tab's to watch: it polls /api/orders/status, which verifies against
+    // Airpay Order Confirmation and settles inline — the same single trusted
+    // path, on the same trigger the success page has always used.
+    submitToAirpay(handoff, document, PAYMENT_WINDOW_NAME)
+    setAwaiting({ orderRef: handoff.orderRef, accessToken: handoff.accessToken })
   }, [contact, items])
 
-  return { status, error, contact, contactErrors, setContactValue, pay, reset }
+  return { status, error, contact, contactErrors, setContactValue, pay, reset, awaiting }
 }

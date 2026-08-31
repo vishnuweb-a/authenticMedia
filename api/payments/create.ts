@@ -197,6 +197,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       amount,
       actionUrl: `${HOSTED_PAYMENT_URL}?token=${encodeURIComponent(token)}`,
       fields,
+      // How the browser gets BACK here after the hosted page (§8.1, §14.3).
+      //
+      // Airpay resolves the Response URL per MID from its own DASHBOARD, never
+      // from anything sent at transaction time — there is no return-URL field
+      // in the payload above, by design. Merchant 2's dashboard points that
+      // Response at KKChat, which is the client's requirement and is not ours
+      // to change. So Airpay will not bring this browser home, and the client
+      // must keep hold of the tab itself.
+      //
+      // ⚠ Derived from the merchant the SERVER just chose — never sent by the
+      // client, never echoed back from the request. It carries NO claim about
+      // any payment: it selects a navigation style and nothing else, so a
+      // tampered value can at worst give the shopper a worse hand-off. What
+      // decides whether an order is paid is Order Confirmation, always.
+      returnsToSite: merchant === 1,
     })
   } catch {
     logEvent('payment.create.error', { orderRef })

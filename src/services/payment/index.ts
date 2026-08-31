@@ -10,6 +10,8 @@ export type {
 export {
   createAirpayPayment,
   fetchOrderStatus,
+  openPaymentWindow,
+  PAYMENT_WINDOW_NAME,
   submitToAirpay,
 } from './airpay-adapter'
 export type {

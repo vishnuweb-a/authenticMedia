@@ -6,6 +6,7 @@ import { ContactPage } from './pages/contact-page'
 import { HomePage } from './pages/home-page'
 import { LegalPage } from './pages/legal-page'
 import { NotFoundPage } from './pages/not-found-page'
+import { OrderSuccessPage } from './pages/order-success-page'
 import { ServicesPage } from './pages/services-page'
 import { ROUTES } from './paths'
 
@@ -24,6 +25,7 @@ export const router = createBrowserRouter([
       { path: ROUTES.terms, element: <LegalPage title="Terms & Conditions" /> },
       { path: ROUTES.privacy, element: <LegalPage title="Privacy Policy" /> },
       { path: ROUTES.refund, element: <LegalPage title="Refund & Cancellation" /> },
+      { path: ROUTES.orderSuccess, element: <OrderSuccessPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

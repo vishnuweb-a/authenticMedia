@@ -869,3 +869,137 @@ Do not claim visual parity without checking it.
 Do not rewrite unrelated code.
 
 Every feature must be responsive and accessible.
+
+29. New Airpay Integration — Rules For Coding Agents
+
+29.1 Read the documentation first
+
+Before touching anything Airpay-related, read docs/AIPAY-DOCS.md completely.
+
+That file is the source of truth for the NEW integration. It outranks general
+Airpay knowledge, this file's earlier placeholder guidance, and any previous
+implementation. AGENTS.md section 30 is the engineering reference layer over it.
+
+Filename note: the document is docs/AIPAY-DOCS.md — not AIRPAY-DOCS.md, not
+docs/documentation.md.
+
+Do not silently correct the document. Items marked PROVEN were established
+empirically against the live gateway and cost real payments to discover. If
+something is unclear, contradictory, or missing, record it as an open question
+(AGENTS.md 30.11) instead of inventing an answer.
+
+29.2 The old implementation is not the new one
+
+Do not assume the previous Yarnvia/Frontiva Airpay implementation is identical
+to this integration. Callback URLs, envelope shapes, field casing, endpoint
+paths and credential roles all differ from what a reasonable person would
+assume. Reuse nothing from an old integration without checking it against
+docs/AIPAY-DOCS.md first.
+
+Specifically do not reuse: the /orderconfirmation/ verify path (it 404s and
+strands every order), the assumption that the callback URL is one the code
+chooses, the assumption that AIRPAY_API_KEY is the OAuth secret, or the
+assumption that the callback plaintext is flat.
+
+Also note that this repository has no api/ directory and no server runtime. The
+files docs/AIPAY-DOCS.md cites as its reference implementation do not exist
+here. The frontend seam is src/services/payment/airpay-adapter.ts, which
+currently and deliberately fails rather than pretending.
+
+29.3 Hard rules
+
+1. Read docs/AIPAY-DOCS.md before touching the new Airpay integration.
+
+2. Do not assume the old Yarnvia/Frontiva Airpay implementation is identical to
+   the new integration.
+
+3. Preserve every documented security requirement. None of them has a
+   development shortcut, and a sandbox convenience flag ships to production the
+   first time someone mis-sets AIRPAY_ENV.
+
+4. Never bypass Airpay verification. Order Confirmation, server-to-server, at
+   POST /verify/, is the only path to a trusted result.
+
+5. Never trust a callback transaction status directly for settlement. A callback
+   is a prompt to go and check. It says SUCCESS because someone typed SUCCESS.
+
+6. Never weaken SecureHash, checksum, or decryption validation. ap_SecureHash is
+   CRC32 — an integrity check, not authentication — so it may only ever add a
+   rejection, never grant a settlement.
+
+7. Never manually mark an order paid. Not in a migration, not in a script, not
+   in the Supabase console, not "just this once to unblock a customer".
+
+8. Never modify production payment data during investigation. Read, log, and
+   report instead.
+
+9. Keep callback processing and settlement separate. The pipeline is
+   parse -> settle -> relay, in that order, and settlement completes before the
+   relay is attempted.
+
+10. Make the smallest implementation change the documentation requires. Do not
+    refactor adjacent payment code, do not restructure the service layer, and do
+    not "improve" a PROVEN detail.
+
+11. Add regression tests before considering the integration complete. See
+    AGENTS.md 30.9 for the required coverage. Never test against the live MID
+    and never create a payment to test.
+
+12. Do not deploy until explicitly authorized. No commit, no push, no deploy as
+    part of exploratory or documentation work.
+
+29.4 The settlement invariant
+
+Required:
+
+callback -> parse/decrypt -> validate callback -> Airpay verification
+         -> trusted transaction result -> settlement -> optional relay
+
+Forbidden:
+
+callback -> trust transaction status -> mark paid
+
+Do not weaken merchant validation, order validation, amount validation,
+cryptographic validation, SecureHash/checksum validation, idempotency, or
+fail-closed behaviour.
+
+Three independent paths reach settlement — the IPN/Response callback, the
+success-page poll, and the cron reconciliation sweep — so no single one is
+load-bearing. All three call ONE settleOrder function. Never write a second
+settlement path.
+
+Fail closed in both directions: refusing to mark an order paid without proof and
+refusing to mark it failed without proof are the same discipline. A confirmation
+with no status is an UNKNOWN, treated as pending; a genuine payment was once
+terminally marked failed because null !== 200, and terminal states cannot be
+recovered by the running system.
+
+An amount that does not match the server-computed total to within 0.001 becomes
+requires_review — never paid, never failed, and never left initiated.
+
+29.5 Secrets
+
+Never print, echo, log, or commit an Airpay credential value. Document names and
+purposes only, with placeholders:
+
+AIRPAY_USERNAME=<secret>
+AIRPAY_PASSWORD=<secret>
+
+The full variable list and each purpose is in AGENTS.md 30.6.
+
+This is a Vite frontend: any VITE_-prefixed value is shipped to browsers. No
+Airpay variable may ever carry VITE_, NEXT_PUBLIC_, or REACT_APP_. All signing
+is server-side; the browser receives only opaque, already-signed fields and
+performs no cryptography.
+
+Never log credentials, derived keys, encdata/response blobs, access tokens, or
+any callback field value. Field names and shape categories are safe and are the
+most useful thing to see; the values beside them are a customer's phone, email
+and VPA.
+
+29.6 Scope discipline for investigation tasks
+
+When asked to study, document, or diagnose rather than implement, do not modify
+api/, src/, database schemas, Supabase logic, payment logic, callback logic,
+checkout, or pricing. Do not modify docs/AIPAY-DOCS.md. Restrict changes to
+AGENTS.md and CLAUDE.md, and only where documenting the integration requires it.

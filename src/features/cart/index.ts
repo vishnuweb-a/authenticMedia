@@ -8,3 +8,5 @@
  * point. No provider SDK or credential exists in this frontend.
  */
 export { CartDrawer } from './components'
+export { useOrderStatus } from './hooks/use-order-status'
+export type { UseOrderStatusResult } from './hooks/use-order-status'

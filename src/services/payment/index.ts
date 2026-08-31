@@ -7,7 +7,17 @@ export type {
   PaymentService,
   PaymentStatus,
 } from './types'
-export { airpayAdapter } from './airpay-adapter'
+export {
+  createAirpayPayment,
+  fetchOrderStatus,
+  submitToAirpay,
+} from './airpay-adapter'
+export type {
+  AirpayHandoff,
+  CreateAirpayPaymentInput,
+  OrderPaymentState,
+  OrderStatusResult,
+} from './airpay-adapter'
 
 /**
  * The active payment implementation.

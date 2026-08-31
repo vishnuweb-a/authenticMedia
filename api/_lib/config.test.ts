@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { DEFAULT_VERIFY_URL, isLiveMid, loadAirpayConfig, optional } from './config'
-import { generateOrderRef } from './order-ref'
+import { DEFAULT_VERIFY_URL, isLiveMid, loadAirpayConfig, optional } from './config.js'
+import { generateOrderRef } from './order-ref.js'
 
 /** Placeholder values only. Never a real credential. */
 const FIXTURE: Record<string, string> = {

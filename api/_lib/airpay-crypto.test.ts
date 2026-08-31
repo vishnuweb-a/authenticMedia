@@ -13,8 +13,8 @@ import {
   istDate,
   privateKey,
   verifySecureHash,
-} from './airpay-crypto'
-import type { AirpayConfig } from './config'
+} from './airpay-crypto.js'
+import type { AirpayConfig } from './config.js'
 
 /** Non-secret fixture values. Never a real credential. */
 const config: AirpayConfig = {

@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 
-import type { AirpayConfig } from './config'
+import type { AirpayConfig } from './config.js'
 
 /**
  * The four Airpay protocol primitives (AIPAY-DOCS §3).

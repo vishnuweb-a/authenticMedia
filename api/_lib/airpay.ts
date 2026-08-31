@@ -1,7 +1,7 @@
-import { buildEnvelope, buildSignedEnvelope, decrypt } from './airpay-crypto'
-import { OAUTH_URL, type AirpayConfig } from './config'
-import { logEvent } from './log'
-import { FIELD_ALIASES, pick, walkFields } from './walk'
+import { buildEnvelope, buildSignedEnvelope, decrypt } from './airpay-crypto.js'
+import { OAUTH_URL, type AirpayConfig } from './config.js'
+import { logEvent } from './log.js'
+import { FIELD_ALIASES, pick, walkFields } from './walk.js'
 
 /**
  * The Airpay gateway client (AIPAY-DOCS §6, §11).

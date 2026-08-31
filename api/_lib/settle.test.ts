@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { computeSecureHash } from './airpay-crypto'
-import type { AirpayConfig } from './config'
-import type { VerifiedTransaction } from './airpay'
+import { computeSecureHash } from './airpay-crypto.js'
+import type { AirpayConfig } from './config.js'
+import type { VerifiedTransaction } from './airpay.js'
 
 /**
  * Settlement regression tests (AGENTS.md §30.9).
@@ -15,7 +15,7 @@ const orders = vi.hoisted(() => ({ map: new Map<string, Record<string, unknown>>
 const settleCalls = vi.hoisted(() => ({ list: [] as Array<[string, string, string | null]> }))
 const settleResult = vi.hoisted(() => ({ value: 'order-uuid' as string | null }))
 
-vi.mock('./db', () => ({
+vi.mock('./db.js', () => ({
   findOrderByRef: async (ref: string) => orders.map.get(ref) ?? null,
   settleOrderRow: async (ref: string, status: string, apId: string | null) => {
     settleCalls.list.push([ref, status, apId])
@@ -23,7 +23,7 @@ vi.mock('./db', () => ({
   },
 }))
 
-const { settleOrder } = await import('./settle')
+const { settleOrder } = await import('./settle.js')
 
 const config: AirpayConfig = {
   mid: '366950',

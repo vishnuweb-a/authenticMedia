@@ -1,7 +1,7 @@
-import { findUnsettledOrders } from '../_lib/db'
-import { header, noStore, safeEqual, type ApiRequest, type ApiResponse } from '../_lib/http'
-import { logEvent } from '../_lib/log'
-import { settleOrder, type SettleOutcome } from '../_lib/settle'
+import { findUnsettledOrders } from '../_lib/db.js'
+import { header, noStore, safeEqual, type ApiRequest, type ApiResponse } from '../_lib/http.js'
+import { logEvent } from '../_lib/log.js'
+import { settleOrder, type SettleOutcome } from '../_lib/settle.js'
 
 /**
  * GET|POST /api/payments/reconcile   (AIPAY-DOCS §16)

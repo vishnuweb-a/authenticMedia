@@ -42,6 +42,7 @@ const TERMINAL = new Set(['paid', 'failed', 'cancelled', 'delivered', 'requires_
 /** Airpay status codes (§11.4). */
 const STATUS_SUCCESS = 200
 const STATUS_IN_PROCESS = 211
+const STATUS_FAILED = 400
 
 /**
  * The paisa tolerance for the amount cross-check (§10.5). Anything looser is a
@@ -177,9 +178,28 @@ export async function settleOrder(
     return { outcome: 'pending', orderRef, paymentStatus: order.status }
   }
 
-  // 8. A definite non-success. Marking failed also demands proof, and we have
-  //    it: Airpay stated a status and it was not success.
-  if (confirmation.status !== STATUS_SUCCESS) {
+  // 8. A definite non-success. Marking failed demands proof, and only a
+  //    DOCUMENTED failure code is proof.
+  //
+  //    ⚠ An unrecognised code is an UNKNOWN, not a failure — the same
+  //    discipline as the statusless guard at step 7, reached through a
+  //    different door. §11.4 documents exactly three codes (200, 211, 400);
+  //    anything else is the gateway saying something we do not understand, and
+  //    a blanket `!== STATUS_SUCCESS` turns that into a terminal `failed`
+  //    exactly as `null !== 200` once did. Order AM2-MAJUV-d7557745 was
+  //    destroyed that way by a TRANSACTIONSTATUS of 503 — a transient
+  //    gateway condition, terminally recorded as a customer's failed payment
+  //    and unrecoverable by the running system.
+  //
+  //    Pending is the safe reading: the reconciliation sweep re-verifies it,
+  //    so a genuinely failed payment still reaches `failed` the moment Airpay
+  //    states 400, while a transient blip resolves on its own.
+  if (confirmation.status !== STATUS_SUCCESS && confirmation.status !== STATUS_FAILED) {
+    logEvent('airpay.verify.unknown_status', { orderRef, status: confirmation.status })
+    return { outcome: 'pending', orderRef, paymentStatus: order.status }
+  }
+
+  if (confirmation.status === STATUS_FAILED) {
     const settledId = await settleOrderRow(orderRef, 'failed', confirmation.apTransactionId)
     if (!settledId) {
       logEvent('payment.settled.race_lost', { orderRef })

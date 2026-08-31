@@ -291,3 +291,116 @@ describe('sandbox refuses to settle (§10.3)', () => {
     expect(settleCalls.list).toEqual([])
   })
 })
+
+describe('⚠ only a DOCUMENTED failure code may mark an order failed (§11.4)', () => {
+  /**
+   * Regression for AM2-MAJUV-d7557745, which Airpay answered with
+   * TRANSACTIONSTATUS 503 — a code §11.4 does not document. The old
+   * `status !== STATUS_SUCCESS` catch-all read that as proof of failure and
+   * terminally destroyed a live order, exactly as `null !== 200` once did.
+   *
+   * §11.4 documents three codes and only three: 200, 211, 400.
+   */
+
+  it('1. an unknown status 503 stays PENDING and writes nothing', async () => {
+    seedOrder()
+    const result = await settleOrder(
+      { orderRef: ORDER_REF },
+      config,
+      async () => verified({ status: 503, apTransactionId: null }),
+    )
+
+    expect(result.outcome).toBe('pending')
+    // 6. The order must not be moved into a terminal state at all.
+    expect(settleCalls.list).toEqual([])
+  })
+
+  it('6. no unknown status may ever write `failed`', async () => {
+    // A spread of codes Airpay has never documented, including the 5xx family
+    // that reads as a transient gateway condition rather than a verdict.
+    for (const status of [0, 1, 100, 201, 210, 212, 300, 401, 402, 404, 429, 500, 502, 503, 504]) {
+      settleCalls.list = []
+      seedOrder()
+      const result = await settleOrder(
+        { orderRef: ORDER_REF },
+        config,
+        async () => verified({ status, apTransactionId: null }),
+      )
+
+      expect(result.outcome, `status ${status} must not settle`).toBe('pending')
+      expect(settleCalls.list, `status ${status} must write nothing`).toEqual([])
+    }
+  })
+
+  it('2. status 400 STILL becomes failed — the documented failure is unchanged', async () => {
+    seedOrder()
+    const result = await settleOrder(
+      { orderRef: ORDER_REF },
+      config,
+      async () => verified({ status: 400, apTransactionId: 'AP-400' }),
+    )
+
+    expect(result.outcome).toBe('failed')
+    expect(result.paymentStatus).toBe('failed')
+    expect(settleCalls.list).toEqual([[ORDER_REF, 'failed', 'AP-400']])
+  })
+
+  it('3. status 200 STILL becomes paid', async () => {
+    seedOrder()
+    const result = await settleOrder({ orderRef: ORDER_REF }, config, async () => verified())
+
+    expect(result.outcome).toBe('paid')
+    expect(settleCalls.list).toEqual([[ORDER_REF, 'succeeded', 'AP-999']])
+  })
+
+  it('4. status 211 IN_PROCESS STILL stays pending', async () => {
+    seedOrder()
+    const result = await settleOrder(
+      { orderRef: ORDER_REF },
+      config,
+      async () => verified({ status: 211 }),
+    )
+
+    expect(result.outcome).toBe('pending')
+    expect(settleCalls.list).toEqual([])
+  })
+
+  it('5. a statusless confirmation STILL stays pending (§10.4 guard intact)', async () => {
+    seedOrder()
+    const result = await settleOrder(
+      { orderRef: ORDER_REF },
+      config,
+      // The guard reads `status === null || !Number.isFinite(status)`, so both
+      // shapes a statusless confirmation can take must land on pending.
+      async () => verified({ status: null as unknown as number }),
+    )
+
+    expect(result.outcome).toBe('pending')
+    expect(settleCalls.list).toEqual([])
+
+    settleCalls.list = []
+    seedOrder()
+    const nan = await settleOrder(
+      { orderRef: ORDER_REF },
+      config,
+      async () => verified({ status: Number.NaN }),
+    )
+
+    expect(nan.outcome).toBe('pending')
+    expect(settleCalls.list).toEqual([])
+  })
+
+  it('an unknown status leaves the order recoverable by the sweep', async () => {
+    // The point of pending over failed: `pending_payment` is what
+    // findUnsettledOrders selects on, so the order can still be settled once
+    // Airpay states a code we understand. `failed` is terminal and could not.
+    seedOrder()
+    const result = await settleOrder(
+      { orderRef: ORDER_REF },
+      config,
+      async () => verified({ status: 503, apTransactionId: null }),
+    )
+
+    expect(result.paymentStatus).toBe('pending_payment')
+  })
+})

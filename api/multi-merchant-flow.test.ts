@@ -475,3 +475,102 @@ describe('10/11/12/13. callback routing and the relay', () => {
     vi.unstubAllGlobals()
   })
 })
+
+describe('an unknown Airpay status is merchant-agnostic (§11.4)', () => {
+  /**
+   * Regression for AM2-MAJUV-d7557745. The unknown-status guard must behave
+   * identically for both merchants — it is keyed purely on the status code and
+   * carries no merchant term — while merchant routing stays exactly as it was.
+   */
+
+  const CASES = [
+    { ref: REF_1, merchant: 1, mid: MID_1, label: 'AM- / merchant 1' },
+    { ref: REF_2, merchant: 2, mid: MID_2, label: 'AM2- / merchant 2' },
+  ] as const
+
+  for (const { ref, merchant, mid, label } of CASES) {
+    it(`7/8/9. ${label}: status 503 stays pending, on the RIGHT credentials`, async () => {
+      seedOrder(ref)
+      const seen: AirpayConfig[] = []
+
+      const result = await settleOrder({ orderRef: ref }, undefined, async (r, config) => {
+        seen.push(config)
+        return { orderRef: r, status: 503, amount: 1499, apTransactionId: null }
+      })
+
+      // The unknown status is pending for BOTH merchants, and nothing is written.
+      expect(result.outcome).toBe('pending')
+      expect(settleRowCalls.list).toEqual([])
+
+      // 8/9. Routing is untouched: the order's OWN merchant was asked.
+      expect(seen).toHaveLength(1)
+      expect(seen[0]?.merchant).toBe(merchant)
+      expect(seen[0]?.mid).toBe(mid)
+    })
+
+    it(`7. ${label}: status 400 still settles failed on the RIGHT credentials`, async () => {
+      seedOrder(ref)
+      const seen: AirpayConfig[] = []
+
+      const result = await settleOrder({ orderRef: ref }, undefined, async (r, config) => {
+        seen.push(config)
+        return { orderRef: r, status: 400, amount: 1499, apTransactionId: 'AP-400' }
+      })
+
+      expect(result.outcome).toBe('failed')
+      expect(settleRowCalls.list).toEqual([{ ref, status: 'failed', apId: 'AP-400' }])
+      expect(seen[0]?.merchant).toBe(merchant)
+      expect(seen[0]?.mid).toBe(mid)
+    })
+
+    it(`7. ${label}: status 200 still settles paid on the RIGHT credentials`, async () => {
+      seedOrder(ref)
+      const seen: AirpayConfig[] = []
+
+      const result = await settleOrder({ orderRef: ref }, undefined, async (r, config) => {
+        seen.push(config)
+        return { orderRef: r, status: 200, amount: 1499, apTransactionId: 'AP-200' }
+      })
+
+      expect(result.outcome).toBe('paid')
+      expect(settleRowCalls.list).toEqual([{ ref, status: 'succeeded', apId: 'AP-200' }])
+      expect(seen[0]?.merchant).toBe(merchant)
+      expect(seen[0]?.mid).toBe(mid)
+    })
+
+    it(`7. ${label}: status 211 still stays pending`, async () => {
+      seedOrder(ref)
+      const result = await settleOrder({ orderRef: ref }, undefined, async (r) => ({
+        orderRef: r,
+        status: 211,
+        amount: 1499,
+        apTransactionId: null,
+      }))
+
+      expect(result.outcome).toBe('pending')
+      expect(settleRowCalls.list).toEqual([])
+    })
+  }
+
+  it('MID 1 is entirely unaffected across the whole documented status set', async () => {
+    // The property that matters for the existing production merchant: for
+    // every code MID 1 has ever returned, the outcome is what it always was.
+    const expected: ReadonlyArray<[number, string]> = [
+      [200, 'paid'],
+      [211, 'pending'],
+      [400, 'failed'],
+    ]
+
+    for (const [status, outcome] of expected) {
+      settleRowCalls.list = []
+      seedOrder(REF_1)
+      const result = await settleOrder({ orderRef: REF_1 }, undefined, async (r) => ({
+        orderRef: r,
+        status,
+        amount: 1499,
+        apTransactionId: 'AP-1',
+      }))
+      expect(result.outcome, `MID 1 status ${status}`).toBe(outcome)
+    }
+  })
+})

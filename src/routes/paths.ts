@@ -12,6 +12,7 @@ export const ROUTES = {
   terms: '/terms',
   privacy: '/privacy',
   refund: '/refund',
+  orderSuccess: '/order-success',
 } as const
 
 export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES]

@@ -31,8 +31,9 @@ export function CartSummary({ total, status, error, onPay }: CartSummaryProps) {
       </div>
 
       {/* A failure is announced, since the pill only changes to "Try Again" and
-          that alone does not say what went wrong. Success is not handled here:
-          the cart is cleared, so the drawer swaps to CartPaymentSuccess. */}
+          that alone does not say what went wrong. There is no success state:
+          paying redirects to Airpay, and the outcome is confirmed on
+          /order-success once the server has verified it. */}
       <div role="status" aria-live="polite">
         {status === 'failed' && error && (
           <p className="mt-4 flex items-start gap-2 text-[14px] text-red-400">

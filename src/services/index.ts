@@ -18,9 +18,18 @@ export type {
   OrderSummary,
 } from './orders'
 
-export { airpayAdapter, paymentService } from './payment'
+export {
+  createAirpayPayment,
+  fetchOrderStatus,
+  paymentService,
+  submitToAirpay,
+} from './payment'
 export type {
+  AirpayHandoff,
+  CreateAirpayPaymentInput,
   CreatePaymentInput,
+  OrderPaymentState,
+  OrderStatusResult,
   PaymentResult,
   PaymentService,
   PaymentStatus,

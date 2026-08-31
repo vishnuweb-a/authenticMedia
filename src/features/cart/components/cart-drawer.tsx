@@ -4,7 +4,6 @@ import { useEffect, useId, useRef } from 'react'
 import { useCart } from '@/stores'
 import { CartEmptyState } from './cart-empty-state'
 import { CartLineItem } from './cart-line-item'
-import { CartPaymentSuccess } from './cart-payment-success'
 import { CartSummary } from './cart-summary'
 import { useCheckout } from '../hooks/use-checkout'
 import { useDialogBehavior } from '@/hooks'
@@ -23,7 +22,7 @@ import { useDialogBehavior } from '@/hooks'
  */
 export function CartDrawer() {
   const { items, total, itemCount, isOpen, removeItem, closeCart } = useCart()
-  const { status, error, order, pay, reset } = useCheckout()
+  const { status, error, pay, reset } = useCheckout()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
@@ -70,9 +69,10 @@ export function CartDrawer() {
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-[25px] py-6">
-          {status === 'succeeded' ? (
-            <CartPaymentSuccess onDone={closeCart} order={order} />
-          ) : itemCount === 0 ? (
+          {/* There is no success state here: paying redirects to Airpay's
+              hosted page, and the outcome is confirmed on /order-success after
+              the server verifies it with Airpay (AIPAY-DOCS §14.1). */}
+          {itemCount === 0 ? (
             <CartEmptyState onBrowse={closeCart} />
           ) : (
             <ul className="flex flex-col gap-3">

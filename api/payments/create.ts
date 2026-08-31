@@ -1,10 +1,10 @@
-import { buildSignedEnvelope } from '../_lib/airpay-crypto.ts'
-import { getAccessToken } from '../_lib/airpay.ts'
-import { HOSTED_PAYMENT_URL, loadAirpayConfig } from '../_lib/config.ts'
-import { getServiceClient } from '../_lib/db.ts'
-import { noStore, type ApiRequest, type ApiResponse } from '../_lib/http.ts'
-import { logEvent } from '../_lib/log.ts'
-import { generateOrderRef } from '../_lib/order-ref.ts'
+import { buildSignedEnvelope } from '../_lib/airpay-crypto'
+import { getAccessToken } from '../_lib/airpay'
+import { HOSTED_PAYMENT_URL, loadAirpayConfig } from '../_lib/config'
+import { getServiceClient } from '../_lib/db'
+import { noStore, type ApiRequest, type ApiResponse } from '../_lib/http'
+import { logEvent } from '../_lib/log'
+import { generateOrderRef } from '../_lib/order-ref'
 
 /**
  * POST /api/payments/create  (AIPAY-DOCS §7)

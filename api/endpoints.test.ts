@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 
-import type { ApiRequest, ApiResponse } from './_lib/http.ts'
+import type { ApiRequest, ApiResponse } from './_lib/http'
 
 /**
  * Endpoint tests: authorization, indistinguishable 404s, and the callback
@@ -11,7 +11,7 @@ import type { ApiRequest, ApiResponse } from './_lib/http.ts'
 const orders = vi.hoisted(() => ({ map: new Map<string, Record<string, unknown>>() }))
 const settled = vi.hoisted(() => ({ calls: [] as string[] }))
 
-vi.mock('./_lib/db.ts', () => ({
+vi.mock('./_lib/db', () => ({
   findOrderByRef: async (ref: string) => orders.map.get(ref) ?? null,
   findUnsettledOrders: async () => [],
   settleOrderRow: async () => 'order-uuid',
@@ -20,8 +20,8 @@ vi.mock('./_lib/db.ts', () => ({
   },
 }))
 
-vi.mock('./_lib/settle.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./_lib/settle.ts')>()
+vi.mock('./_lib/settle', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./_lib/settle')>()
   return {
     ...actual,
     settleOrder: async ({ orderRef }: { orderRef: string }) => {
@@ -31,9 +31,9 @@ vi.mock('./_lib/settle.ts', async (importOriginal) => {
   }
 })
 
-const statusHandler = (await import('./orders/status.ts')).default
-const reconcileHandler = (await import('./payments/reconcile.ts')).default
-const createHandler = (await import('./payments/create.ts')).default
+const statusHandler = (await import('./orders/status')).default
+const reconcileHandler = (await import('./payments/reconcile')).default
+const createHandler = (await import('./payments/create')).default
 
 interface Captured {
   code: number

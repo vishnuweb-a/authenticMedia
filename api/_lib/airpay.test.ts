@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { encrypt } from './airpay-crypto.ts'
-import type { AirpayConfig } from './config.ts'
-import { getAccessToken, resetTokenCache, verifyTransaction } from './airpay.ts'
+import { encrypt } from './airpay-crypto'
+import type { AirpayConfig } from './config'
+import { getAccessToken, resetTokenCache, verifyTransaction } from './airpay'
 
 /**
  * OAuth and Order Confirmation tests (AIPAY-DOCS §6, §11).

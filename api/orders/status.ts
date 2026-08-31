@@ -1,6 +1,6 @@
-import { findOrderByRef } from '../_lib/db.ts'
-import { noStore, safeEqual, type ApiRequest, type ApiResponse } from '../_lib/http.ts'
-import { isSettledOutcome, settleOrder } from '../_lib/settle.ts'
+import { findOrderByRef } from '../_lib/db'
+import { noStore, safeEqual, type ApiRequest, type ApiResponse } from '../_lib/http'
+import { isSettledOutcome, settleOrder } from '../_lib/settle'
 
 /**
  * GET /api/orders/status?ref=<orderRef>&t=<access_token>   (AIPAY-DOCS §15)

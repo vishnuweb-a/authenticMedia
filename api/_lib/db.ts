@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-import { ConfigError } from './config.ts'
+import { ConfigError } from './config'
 
 /**
  * Server-side Supabase access (AIPAY-DOCS §17, AGENTS.md §30.8).

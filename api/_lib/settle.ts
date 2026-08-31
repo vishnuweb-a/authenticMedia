@@ -1,8 +1,8 @@
-import { verifyTransaction, type VerifiedTransaction } from './airpay.ts'
-import { verifySecureHash } from './airpay-crypto.ts'
-import { isLiveMid, loadAirpayConfig, type AirpayConfig } from './config.ts'
-import { findOrderByRef, settleOrderRow } from './db.ts'
-import { logEvent } from './log.ts'
+import { verifyTransaction, type VerifiedTransaction } from './airpay'
+import { verifySecureHash } from './airpay-crypto'
+import { isLiveMid, loadAirpayConfig, type AirpayConfig } from './config'
+import { findOrderByRef, settleOrderRow } from './db'
+import { logEvent } from './log'
 
 /**
  * Settlement — the ONLY place an order may be marked paid (AIPAY-DOCS §10).

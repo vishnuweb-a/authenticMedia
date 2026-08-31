@@ -4,6 +4,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/api/orders/:ref", "destination": "/api/orders/status?ref=:ref" },
+    {
+      "source": "/callback/cpm/arp_frontiva/collection",
+      "destination": "/api/callback/cpm/arp_frontiva/collection"
+    },
+    {
+      "source": "/callback/cpm/arp_frontiva/collection/",
+      "destination": "/api/callback/cpm/arp_frontiva/collection"
+    },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "functions": {

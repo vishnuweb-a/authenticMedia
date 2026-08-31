@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 import type { ApiRequest, ApiResponse } from './_lib/http.js'
 
@@ -106,8 +106,8 @@ describe('GET /api/orders/status (§15)', () => {
       res,
     )
 
-    // This is the PRIMARY settlement trigger in this integration, because the
-    // Airpay callback goes to KKChat rather than to us.
+    // One of three triggers that reach settlement; it covers a callback that
+    // was dropped or delayed.
     expect(settled.calls).toEqual([ORDER_REF])
   })
 
@@ -227,13 +227,38 @@ describe('callback configuration', () => {
     crons: Array<{ path: string }>
   }
 
-  it('exposes no Airpay callback receiver: the callback goes directly to KKChat', () => {
+  it('exposes the Airpay callback receiver at the dashboard-registered path', () => {
     // ⚠ Topology, confirmed by the client. Airpay's Response and IPN URLs both
-    // point at https://kkchat.in/callback/cpm/arp/collection. This application
-    // deliberately hosts NO /callback/... route, and settles by pulling Order
-    // Confirmation instead (§11, §15, §16).
-    const sources = vercelConfig.rewrites.map((r) => r.source)
-    expect(sources.some((s) => s.includes('/callback/'))).toBe(false)
+    // point at https://authenticmedia.fun/callback/cpm/arp_frontiva/collection,
+    // so this application MUST host that route. Airpay calls the URL registered
+    // in its dashboard, not one we send (§8.1) — before this rewrite existed,
+    // POST to it returned 405 and a real payment was stranded.
+    const rule = vercelConfig.rewrites.find(
+      (r) => r.source === '/callback/cpm/arp_frontiva/collection',
+    )
+    expect(rule?.destination).toBe('/api/callback/cpm/arp_frontiva/collection')
+  })
+
+  it('places the callback rewrite ABOVE the SPA catch-all', () => {
+    // Order is load-bearing: below the catch-all, /callback/... is served
+    // index.html and the function is never reached (§8.1).
+    const callbackAt = vercelConfig.rewrites.findIndex((r) => r.source.startsWith('/callback/'))
+    const spaAt = vercelConfig.rewrites.findIndex((r) => r.destination === '/index.html')
+    expect(callbackAt).toBeGreaterThanOrEqual(0)
+    expect(callbackAt).toBeLessThan(spaAt)
+  })
+
+  it('routes the trailing-slash form to the same function', () => {
+    const rule = vercelConfig.rewrites.find(
+      (r) => r.source === '/callback/cpm/arp_frontiva/collection/',
+    )
+    expect(rule?.destination).toBe('/api/callback/cpm/arp_frontiva/collection')
+  })
+
+  it('ships a handler file at the rewrite destination', () => {
+    // A rewrite pointing at a file that does not exist is a 404, which Airpay
+    // retries forever.
+    expect(existsSync('api/callback/cpm/arp_frontiva/collection.ts')).toBe(true)
   })
 
   it('routes /api/* to functions and everything else to the SPA', () => {

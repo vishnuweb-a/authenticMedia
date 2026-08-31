@@ -10,10 +10,9 @@ import { settleOrder, type SettleOutcome } from '../_lib/settle.js'
  * keyed by orderid — a value we generate and own — so settlement never
  * actually depends on being told.
  *
- * ⚠ In this integration that property is load-bearing rather than merely
- * convenient: Airpay posts its callback to KKChat, so this sweep and the
- * success-page poll are the only two paths that reach settlement. This one
- * covers the shopper who paid and then closed the tab.
+ * This sweep is the backstop of the three settlement paths: it covers the
+ * shopper who paid and then closed the tab, so neither the callback nor the
+ * success-page poll ever ran.
  */
 
 /** Give the success-page poll a chance first. */

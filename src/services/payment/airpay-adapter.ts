@@ -10,11 +10,11 @@ import type { ServiceResult } from '@/services/result'
  * signing, and it forwards the returned fields to Airpay's hosted page
  * verbatim — without inspecting or reordering them (AIPAY-DOCS §7.6).
  *
- * ⚠ Callback topology: Airpay delivers its Response/IPN callback directly to
- * KKChat (https://kkchat.in/callback/cpm/arp/collection), not to this
- * application. Nothing in this file — and nothing anywhere in the browser —
- * may treat the return from the hosted page as evidence of payment. The
- * success page asks the server, which asks Airpay (§14.1).
+ * ⚠ Nothing in this file — and nothing anywhere in the browser — may treat
+ * the return from the hosted page as evidence of payment. Airpay's Response
+ * and IPN callbacks are received server-side at
+ * /callback/cpm/arp_frontiva/collection, and even there a callback only
+ * prompts a check. The success page asks the server, which asks Airpay (§14.1).
  */
 
 export interface AirpayHandoff {

@@ -5,13 +5,13 @@ import { isSettledOutcome, settleOrder } from '../_lib/settle.js'
 /**
  * GET /api/orders/status?ref=<orderRef>&t=<access_token>   (AIPAY-DOCS §15)
  *
- * The authoritative status endpoint — and, in this integration, the PRIMARY
- * settlement trigger.
+ * The authoritative status endpoint, and one of three triggers that reach
+ * settlement.
  *
- * Because Airpay delivers its callback to KKChat rather than to us, no webhook
- * ever prompts this application to check. The shopper sitting on the success
- * page drives verification themselves: if the order is unsettled, settleOrder
- * runs inline against Order Confirmation. Same trusted path, different trigger.
+ * Self-healing: if the order is unsettled, settleOrder runs inline against
+ * Order Confirmation. The shopper sitting on the success page drives
+ * verification themselves when the callback never arrived or was delayed. Same
+ * trusted path, different trigger.
  */
 
 function single(value: string | string[] | undefined): string {

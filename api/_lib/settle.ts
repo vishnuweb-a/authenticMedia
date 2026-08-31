@@ -7,15 +7,13 @@ import { logEvent } from './log.js'
 /**
  * Settlement — the ONLY place an order may be marked paid (AIPAY-DOCS §10).
  *
- * There is exactly one settleOrder. Every path that can settle an order calls
- * it: the success-page poll and the cron reconciliation sweep. Never write a
- * second settlement path.
+ * There is exactly one settleOrder. All three paths that can settle an order
+ * call it: the Response/IPN callback, the success-page poll and the cron
+ * reconciliation sweep. Never write a second settlement path.
  *
- * ⚠ In this integration Airpay delivers its callback to KKChat, not to us, so
- * the callback-driven path documented in §8 does not exist here. That removes
- * a PROMPT to check, not the check itself: Order Confirmation is a pull
- * interface keyed on our own order reference (§11), so verification never
- * depended on being told.
+ * No caller is load-bearing on its own. Order Confirmation is a PULL interface
+ * keyed on our own order reference (§11), so a callback only ever supplies a
+ * PROMPT to check — never the answer.
  */
 
 export type SettleOutcome =
@@ -144,9 +142,25 @@ export async function settleOrder(
     return { outcome: 'pending', orderRef, paymentStatus: order.status }
   }
 
-  // 6/7. IN_PROCESS is legitimate for UPI, and a statusless confirmation is an
-  //      UNKNOWN — guarded here as well as in verifyTransaction (§10.4).
+  // 6. IN_PROCESS is legitimate for UPI — the shopper is simply waiting.
   if (confirmation.status === STATUS_IN_PROCESS) {
+    return { outcome: 'pending', orderRef, paymentStatus: order.status }
+  }
+
+  // 7. ⚠ PROVEN §10.4 — "no status" is an UNKNOWN, NOT a failure.
+  //
+  //    This is the SECOND of the two guards the documentation requires: the
+  //    first is in verifyTransaction, which refuses to return a statusless
+  //    confirmation. Without this one, a status that could not be read falls
+  //    through to the `!== STATUS_SUCCESS` comparison below — because
+  //    null !== 200 — and the order is terminally marked failed. A genuine ₹81
+  //    UPI payment was destroyed exactly that way, and because `failed` is
+  //    terminal nothing in the running system could recover it.
+  //
+  //    Refusing to mark an order paid without proof and refusing to mark it
+  //    failed without proof are the same discipline (edge case 23).
+  if (confirmation.status === null || !Number.isFinite(confirmation.status)) {
+    logEvent('airpay.verify.no_status', { orderRef })
     return { outcome: 'pending', orderRef, paymentStatus: order.status }
   }
 

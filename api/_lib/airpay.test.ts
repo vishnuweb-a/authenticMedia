@@ -98,6 +98,37 @@ describe('OAuth (§6)', () => {
     expect(body.get('privatekey')).toBeNull()
   })
 
+  it('names the response field NAMES when no token is found, and never a value', async () => {
+    const logs: string[] = []
+    const spy = vi.spyOn(console, 'log').mockImplementation((line: string) => {
+      logs.push(line)
+    })
+
+    // A refusal that states no `success` field: previously indistinguishable
+    // from a token we simply failed to locate.
+    fetchMock.mockResolvedValue(
+      respond({ status_code: 401, response_code: '401', message: 'Unauthorized' }),
+    )
+    expect(await getAccessToken(config)).toBeNull()
+    spy.mockRestore()
+
+    const entry = logs.map((l) => JSON.parse(l) as Record<string, unknown>)
+      .find((e) => e['event'] === 'airpay.oauth.no_token')
+    expect(entry?.['reason']).toBe('absent')
+    expect(entry?.['status']).toBe(200)
+
+    const names = String(entry?.['fieldNames']).split(',')
+    expect(names).toContain('status_code')
+    expect(names).toContain('message')
+    // Names only — the VALUES beside them must never be logged (§9.8).
+    expect(String(entry?.['fieldNames'])).not.toContain('Unauthorized')
+  })
+
+  it('still requires a genuine token — a diagnostic field is never treated as one', async () => {
+    fetchMock.mockResolvedValue(respond({ status_code: 200, message: 'Success', data: { msg: 'x' } }))
+    expect(await getAccessToken(config)).toBeNull()
+  })
+
   it('caches the token across calls', async () => {
     fetchMock.mockResolvedValue(respond({ data: { access_token: 'tok' } }))
     await getAccessToken(config)

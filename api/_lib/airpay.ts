@@ -26,7 +26,7 @@ const USER_AGENT = 'AuthenticMedia/1.0 (+https://authenticmedia.fun)'
 async function postForm(
   url: string,
   fields: Record<string, string>,
-): Promise<{ ok: boolean; status: number; text: string } | null> {
+): Promise<{ ok: boolean; status: number; text: string; contentType: string | null } | null> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), AIRPAY_TIMEOUT_MS)
   try {
@@ -43,7 +43,12 @@ async function postForm(
       body: new URLSearchParams(fields).toString(),
       signal: controller.signal,
     })
-    return { ok: response.ok, status: response.status, text: await response.text() }
+    return {
+      ok: response.ok,
+      status: response.status,
+      text: await response.text(),
+      contentType: response.headers.get('content-type'),
+    }
   } catch {
     return null
   } finally {
@@ -126,7 +131,16 @@ export async function getAccessToken(config: AirpayConfig): Promise<string | nul
 
   const token = pick(fields, ['access_token', 'accessToken', 'access-token', 'token'])
   if (!token) {
-    logEvent('airpay.oauth.no_token', { reason: 'absent' })
+    // A refusal that states no `success` field is indistinguishable from a
+    // grant whose token we failed to locate: both land here. Emit the field
+    // NAMES so the next occurrence names itself — §9.8 permits names and
+    // shape categories, never values, and a name cannot carry a credential.
+    logEvent('airpay.oauth.no_token', {
+      reason: 'absent',
+      status: response.status,
+      contentType: response.contentType ?? 'unknown',
+      fieldNames: [...fields.keys()].slice(0, 24).join(','),
+    })
     return null
   }
 

@@ -1,5 +1,6 @@
 import { buildSignedEnvelope } from '../_lib/airpay-crypto.js'
 import { getAccessToken } from '../_lib/airpay.js'
+import { hasContact, normaliseContact } from '../_lib/contact.js'
 import { HOSTED_PAYMENT_URL, loadAirpayConfig } from '../_lib/config.js'
 import { getServiceClient } from '../_lib/db.js'
 import { noStore, type ApiRequest, type ApiResponse } from '../_lib/http.js'
@@ -75,6 +76,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return
   }
 
+  // ⚠ PROVEN in production — Airpay's hosted page answers "Either email or
+  // contact number is mandatory" when buyer_email and buyer_phone both arrive
+  // empty. That refusal lands AFTER the token is minted and the order is
+  // recorded, so the shopper sees a gateway error page and the order strands as
+  // pending_payment. Refuse here instead: before the order row, before OAuth.
+  const contact = normaliseContact(body?.contact)
+  if (!hasContact(contact)) {
+    logEvent('payment.create.contact_missing', {
+      emailPresent: false,
+      contactPresent: false,
+    })
+    res.status(400).json({ error: 'contact_required' })
+    return
+  }
+
   let config
   try {
     config = loadAirpayConfig()
@@ -86,7 +102,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   }
 
   const orderRef = generateOrderRef()
-  const contact = body?.contact ?? {}
 
   try {
     const supabase = getServiceClient()
@@ -101,9 +116,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       p_service_slugs: slugs,
       p_order_ref: orderRef,
       p_guest_token: guestToken,
-      p_contact_name: `${asString(contact.firstName)} ${asString(contact.lastName)}`.trim() || null,
-      p_contact_email: asString(contact.email) || null,
-      p_contact_phone: asString(contact.phone) || null,
+      p_contact_name: `${contact.firstName} ${contact.lastName}`.trim() || null,
+      p_contact_email: contact.email || null,
+      p_contact_phone: contact.phone || null,
     })
 
     const order = Array.isArray(created) ? created[0] : created
@@ -123,7 +138,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       return
     }
 
-    logEvent('payment.initiated', { orderRef })
+    // Presence only — never the address or the number (§9.8).
+    logEvent('payment.initiated', {
+      orderRef,
+      emailPresent: contact.email !== '',
+      contactPresent: contact.phone !== '',
+    })
 
     // 4. THEN mint the token.
     const token = await getAccessToken(config)
@@ -143,10 +163,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
         amount: amount.toFixed(2), // fixed two decimals
         currency_code: '356', // ISO 4217 numeric, INR
         iso_currency: 'inr',
-        buyer_email: asString(contact.email),
-        buyer_phone: asString(contact.phone),
-        buyer_firstname: asString(contact.firstName),
-        buyer_lastname: asString(contact.lastName),
+        // At least one of these two is non-empty — guaranteed by hasContact
+        // above, which is what Airpay's hosted page actually requires (§7.3).
+        buyer_email: contact.email,
+        buyer_phone: contact.phone,
+        buyer_firstname: contact.firstName,
+        buyer_lastname: contact.lastName,
       },
       config,
     )

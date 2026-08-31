@@ -3,6 +3,7 @@ import { useEffect, useId, useRef } from 'react'
 
 import { useCart } from '@/stores'
 import { CartEmptyState } from './cart-empty-state'
+import { CheckoutContactFields } from './checkout-contact-fields'
 import { CartLineItem } from './cart-line-item'
 import { CartSummary } from './cart-summary'
 import { useCheckout } from '../hooks/use-checkout'
@@ -22,7 +23,7 @@ import { useDialogBehavior } from '@/hooks'
  */
 export function CartDrawer() {
   const { items, total, itemCount, isOpen, removeItem, closeCart } = useCart()
-  const { status, error, pay, reset } = useCheckout()
+  const { status, error, contact, contactErrors, setContactValue, pay, reset } = useCheckout()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
@@ -75,11 +76,22 @@ export function CartDrawer() {
           {itemCount === 0 ? (
             <CartEmptyState onBrowse={closeCart} />
           ) : (
-            <ul className="flex flex-col gap-3">
-              {items.map((item) => (
-                <CartLineItem key={item.serviceId} item={item} onRemove={removeItem} />
-              ))}
-            </ul>
+            <div className="flex flex-col gap-6">
+              <ul className="flex flex-col gap-3">
+                {items.map((item) => (
+                  <CartLineItem key={item.serviceId} item={item} onRemove={removeItem} />
+                ))}
+              </ul>
+
+              {/* Airpay refuses a payment with neither an email nor a phone
+                  number, so one is collected before the handoff (§7.3). */}
+              <CheckoutContactFields
+                values={contact}
+                errors={contactErrors}
+                disabled={status === 'pending'}
+                onChange={setContactValue}
+              />
+            </div>
           )}
         </div>
 

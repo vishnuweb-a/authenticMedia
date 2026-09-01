@@ -44,7 +44,11 @@ export interface CallbackParse {
   readonly fields: CallbackFields | null
   /**
    * The decoded fields with their ORIGINAL casing, for the relay (§13.1).
-   * Populated only once the envelope has been opened.
+   *
+   * The plaintext fields when an envelope was opened; the outer fields when
+   * the callback legitimately carried no envelope (`envelope: absent`, §9.6).
+   * Empty whenever the read was REJECTED — merchant mismatch or an unreadable
+   * envelope — so a rejected delivery can never be forwarded.
    */
   readonly relayFields: Readonly<Record<string, string>>
   /** Diagnostics — names and categories only, never values (§9.8). */
@@ -297,7 +301,6 @@ export async function parseCallback(req: ApiRequest): Promise<CallbackParse> {
   const sealed = findEnvelope(outer)
   let envelope: EnvelopeState = 'absent'
   let effective: Record<string, unknown> = outer
-  const relayFields: Record<string, string> = {}
 
   if (sealed) {
     const config = (() => {
@@ -358,9 +361,30 @@ export async function parseCallback(req: ApiRequest): Promise<CallbackParse> {
     const replaced: Record<string, unknown> = {}
     for (const { key, value } of walked.values()) {
       replaced[key] = value
-      relayFields[key] = value
     }
     effective = replaced
+  }
+
+  // The relay payload is the EFFECTIVE fields — the plaintext when an envelope
+  // was opened, the outer fields when there was none (§13.1).
+  //
+  // ⚠ Derived here rather than inside the `if (sealed)` branch above. While it
+  // was populated only on the decrypted path, a callback that legitimately
+  // arrived WITHOUT an envelope produced zero relay fields, and the relay's
+  // "nothing to send" guard in callback-flow silently skipped it. Such a
+  // callback parsed, settled and was answered 200 — it simply never reached
+  // KKChat, and no log line said so. `envelope: absent` is a documented,
+  // legitimate parse state (§9.6, §9.8), not a rejection.
+  //
+  // This changes only WHICH validated callbacks are forwarded. Every rejection
+  // above — merchant mismatch, unreadable envelope — returns before this point
+  // and still relays nothing, and the sealed path still forwards the OPENED
+  // plaintext and never the envelope, because `effective` was replaced.
+  const relayFields: Record<string, string> = {}
+  for (const [key, value] of Object.entries(effective)) {
+    if (value === null || value === undefined) continue
+    if (typeof value === 'object') continue
+    relayFields[key] = String(value)
   }
 
   const orderRef = lookup(effective, FIELD_ALIASES.orderRef)

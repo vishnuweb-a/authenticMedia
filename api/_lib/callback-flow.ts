@@ -166,6 +166,15 @@ export async function handleAirpayCallback(
   //
   //    ONE destination, for every callback that reaches here. There is no
   //    merchant-specific forwarding and nothing to branch on.
+  //
+  //    ⚠ The SETTLEMENT OUTCOME IS NOT CONSULTED. A callback for an order this
+  //    application has never heard of settles to `unknown_order` and is
+  //    forwarded anyway: the same Airpay MID is used by another system, whose
+  //    callbacks arrive here and belong to KKChat regardless of what our
+  //    database contains. Forwarding eligibility is decided ENTIRELY by the
+  //    parse above — a delivery that failed the merchant check or whose
+  //    envelope would not open returned long before this line, and one that is
+  //    settled, unsettled, duplicate or unknown reaches it identically.
   if (options.relay && Object.keys(parsed.relayFields).length > 0) {
     await forwardCallback(parsed.relayFields)
   }

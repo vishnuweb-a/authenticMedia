@@ -32,12 +32,12 @@ const OPTIONS: ReadonlyArray<{
 }> = [
   {
     value: 1,
-    label: 'Airpay — Primary payment',
+    label: 'Pay with airpay',
     description: 'Pay securely by card, UPI, net banking or wallet.',
   },
   {
     value: 2,
-    label: 'Airpay — Alternative payment',
+    label: 'Pay with airpay',
     description: 'A second Airpay gateway. Use this if the primary one fails.',
   },
 ]

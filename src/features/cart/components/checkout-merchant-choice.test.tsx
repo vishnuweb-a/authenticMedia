@@ -61,8 +61,8 @@ describe('23. the checkout renders exactly two merchant options', () => {
 
   it('labels each option in prose the shopper can act on', () => {
     const markup = render()
-    expect(markup).toContain('Primary payment')
-    expect(markup).toContain('Alternative payment')
+    expect(markup.match(/Pay with airpay/g)).toHaveLength(2)
+    expect(markup).toContain('Use this if the primary one fails.')
   })
 
   it('uses a real fieldset and legend, so the group is announced as a group', () => {

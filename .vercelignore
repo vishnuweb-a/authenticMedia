@@ -1,0 +1,14 @@
+# Test files must never become Serverless Functions.
+#
+# vercel.json's `functions` glob is "api/**/*.ts", which matches every .ts file
+# under api/ — including *.test.ts. Each match is built and deployed as its own
+# Function, so the 17 test files here were being published as public endpoints
+# and counted against the deployment's Function limit. Adding six merchant tests
+# in ae392fc pushed the count past that limit and the deployment failed at
+# "Deploying outputs".
+#
+# Vitest reads these from the repository (vitest.config.ts include:
+# "api/**/*.test.ts"), never from the deployment, so excluding them from upload
+# changes nothing about the test suite.
+*.test.ts
+*.test.tsx

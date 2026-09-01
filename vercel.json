@@ -15,9 +15,10 @@
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "functions": {
-    "api/**/*.ts": {
-      "maxDuration": 10
-    }
+    "api/orders/status.ts": { "maxDuration": 10 },
+    "api/payments/create.ts": { "maxDuration": 10 },
+    "api/payments/reconcile.ts": { "maxDuration": 10 },
+    "api/callback/cpm/arp_frontiva/collection.ts": { "maxDuration": 10 }
   },
   "crons": [
     {

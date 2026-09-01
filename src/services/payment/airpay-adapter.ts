@@ -23,18 +23,6 @@ export interface AirpayHandoff {
   readonly amount: number
   readonly actionUrl: string
   readonly fields: Readonly<Record<string, string>>
-  /**
-   * Whether Airpay will bring this browser back to THIS site (§8.1, §14.3).
-   *
-   * Stated by the SERVER from the merchant it validated and loaded; a value
-   * sent by a client is ignored. Airpay resolves its Response URL per MID from its own
-   * dashboard, so for merchant 2 — whose dashboard points at KKChat, as the
-   * client requires — the answer is no, and this tab must not be navigated away
-   * or the shopper never comes back.
-   *
-   * ⚠ It carries NO claim about any payment. It selects a navigation style.
-   */
-  readonly returnsToSite: boolean
 }
 
 export type OrderPaymentState =
@@ -54,21 +42,8 @@ export interface OrderStatusResult {
 
 const UNAVAILABLE = 'Payments are unavailable right now. Please try again shortly.'
 
-/**
- * Which Airpay payment option the shopper chose at checkout.
- *
- * An INDEX into two server-held credential sets — never a MID, a credential or
- * any part of a merchant configuration, none of which exists in the browser at
- * all. The server validates it against an exhaustive 1|2 allowlist and does the
- * mapping itself, so this value selects BETWEEN two merchants the server
- * defines and can neither describe nor reach inside either one.
- */
-export type AirpayMerchantChoice = 1 | 2
-
 export interface CreateAirpayPaymentInput {
   readonly serviceSlugs: readonly string[]
-  /** Required. The server refuses the request rather than guessing one. */
-  readonly merchant: AirpayMerchantChoice
   readonly contact: {
     readonly firstName?: string
     readonly lastName?: string
@@ -93,8 +68,6 @@ export async function createAirpayPayment(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         serviceSlugs: input.serviceSlugs,
-        // The shopper's choice of payment option, as an index only (§2.4).
-        merchant: input.merchant,
         // public.orders requires exactly one owner; this flow is guest
         // checkout. The token identifies a session for "my orders" reads —
         // it is never authorization to settle.
@@ -119,10 +92,6 @@ export async function createAirpayPayment(
       amount: typeof data.amount === 'number' ? data.amount : 0,
       actionUrl: data.actionUrl,
       fields: data.fields,
-      // Absent means "the old, proven behaviour": a full-tab hand-off that
-      // Airpay returns to this site. An older deployment of the API omits the
-      // field entirely, and that must keep working exactly as before.
-      returnsToSite: data.returnsToSite !== false,
     })
   } catch {
     return err<AirpayHandoff>('offline', UNAVAILABLE)
@@ -132,23 +101,19 @@ export async function createAirpayPayment(
 /**
  * Hands the browser off to Airpay's hosted page.
  *
- * Builds a hidden form and POSTs it, forwarding the fields verbatim. The
- * browser performs no cryptography and holds no credential (§7.6).
+ * Builds a hidden form and POSTs it into THIS tab, forwarding the fields
+ * verbatim. The browser performs no cryptography and holds no credential
+ * (§7.6).
  *
- * `target` names the browsing context the form POSTs into. The default is this
- * tab, which is the original, production-proven behaviour and stays the default
- * for merchant 1.
+ * The full-tab hand-off is the original, production-proven behaviour: Airpay's
+ * dashboard Response URL for this MID points back at this site, so Airpay
+ * itself brings the shopper home to /order-success (§8.1, §14.3).
  */
-export function submitToAirpay(
-  handoff: AirpayHandoff,
-  doc: Document = document,
-  target?: string,
-): void {
+export function submitToAirpay(handoff: AirpayHandoff, doc: Document = document): void {
   const form = doc.createElement('form')
   form.method = 'POST'
   form.action = handoff.actionUrl
   form.style.display = 'none'
-  if (target) form.target = target
 
   for (const [name, value] of Object.entries(handoff.fields)) {
     const input = doc.createElement('input')
@@ -160,35 +125,6 @@ export function submitToAirpay(
 
   doc.body.appendChild(form)
   form.submit()
-}
-
-/**
- * The name of the payment window (§14.3).
- *
- * A fixed name, so a second hand-off REUSES the same window rather than opening
- * another. Two windows would mean two hosted pages open on the same order — the
- * shortest path to a shopper paying twice.
- */
-export const PAYMENT_WINDOW_NAME = 'authenticmedia-airpay'
-
-/**
- * Opens the window that will hold the Airpay hosted page (§14.3).
- *
- * ⚠ Must be called SYNCHRONOUSLY inside the click handler, before any `await`.
- * Popup blockers allow a window opened during a user gesture and refuse one
- * opened after the call stack has yielded — so this cannot wait for
- * createAirpayPayment to resolve. It therefore opens `about:blank` first and is
- * pointed at the gateway once the fields arrive.
- *
- * Returns null when the browser refused, which is an expected outcome and not
- * an error: the caller falls back to the full-tab hand-off.
- */
-export function openPaymentWindow(win: Window = window): Window | null {
-  try {
-    return win.open('', PAYMENT_WINDOW_NAME)
-  } catch {
-    return null
-  }
 }
 
 /**

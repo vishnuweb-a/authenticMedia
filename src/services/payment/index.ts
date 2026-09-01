@@ -7,16 +7,9 @@ export type {
   PaymentService,
   PaymentStatus,
 } from './types'
-export {
-  createAirpayPayment,
-  fetchOrderStatus,
-  openPaymentWindow,
-  PAYMENT_WINDOW_NAME,
-  submitToAirpay,
-} from './airpay-adapter'
+export { createAirpayPayment, fetchOrderStatus, submitToAirpay } from './airpay-adapter'
 export type {
   AirpayHandoff,
-  AirpayMerchantChoice,
   CreateAirpayPaymentInput,
   OrderPaymentState,
   OrderStatusResult,

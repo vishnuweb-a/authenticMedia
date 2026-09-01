@@ -1,11 +1,10 @@
 import { isBrowserLeg, parseCallback } from './callback-payload.js'
-import { optional, type MerchantId } from './config.js'
+import { optional } from './config.js'
 import { header, noStore, type ApiRequest, type ApiResponse } from './http.js'
 import { logEvent } from './log.js'
 import { forwardCallback } from './relay.js'
 import { settleOrder, type SettleOutcome } from './settle.js'
 import { findOrderByRef } from './db.js'
-import { merchantForOrderRef } from './order-ref.js'
 
 /**
  * The Airpay callback pipeline (AIPAY-DOCS §8, §13.7).
@@ -94,20 +93,15 @@ async function successUrl(req: ApiRequest, orderRef: string | null): Promise<str
 export async function handleAirpayCallback(
   req: ApiRequest,
   res: ApiResponse,
-  options: { readonly relay: boolean; readonly merchant?: MerchantId } = { relay: true },
+  options: { readonly relay: boolean } = { relay: true },
 ): Promise<void> {
   noStore(res)
 
   const browser = isBrowserLeg(req)
 
-  // Which merchant's receiver this is — stated by the ROUTE (§2.4). Merchant 2
-  // does not have a receiver here at all: Airpay delivers its callbacks
-  // straight to KKChat, so nothing should ever reach this pipeline claiming to
-  // be merchant 2, and the merchant check below rejects it if it does.
-  const merchant: MerchantId = options.merchant ?? 1
-
-  // 1. PARSE.
-  const parsed = await parseCallback(req, merchant)
+  // 1. PARSE. The parser checks the stated merchant against the server's own
+  //    MID before it opens anything — one merchant, one right answer.
+  const parsed = await parseCallback(req)
 
   if (!parsed.ok || !parsed.fields) {
     // Diagnostics are NAMES and CATEGORIES only, never values (§9.8). Each
@@ -170,22 +164,10 @@ export async function handleAirpayCallback(
   //    affect it. Awaited because a serverless instance may be frozen the
   //    moment the response is written (§13.4).
   //
-  //    ⚠ Merchant 2 is NEVER relayed from here (§2.4, §13.8). Airpay posts its
-  //    callbacks for that merchant directly to KKChat at
-  //    .../cpm/arp/collection, so a relay of ours would be a SECOND delivery of
-  //    a callback KKChat already has — not a missing one. The guard is on the
-  //    ORDER REFERENCE rather than on the route, so it holds even if a
-  //    merchant-2 callback somehow reaches a merchant-1 receiver.
-  const relayMerchant = merchantForOrderRef(fields.orderRef)
-
-  if (options.relay && relayMerchant === 1 && Object.keys(parsed.relayFields).length > 0) {
+  //    ONE destination, for every callback that reaches here. There is no
+  //    merchant-specific forwarding and nothing to branch on.
+  if (options.relay && Object.keys(parsed.relayFields).length > 0) {
     await forwardCallback(parsed.relayFields)
-  } else if (options.relay && relayMerchant !== 1) {
-    logEvent('payment.callback.forward.skipped', {
-      orderRef: fields.orderRef,
-      merchant: relayMerchant,
-      reason: 'direct_to_kkchat',
-    })
   }
 
   // 4. REPLY.

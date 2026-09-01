@@ -19,7 +19,7 @@ const GUEST = '11111111-1111-4111-8111-111111111111'
 
 vi.mock('@/lib/supabase', () => ({ getGuestToken: () => GUEST }))
 
-const { createAirpayPayment } = await import('./airpay-adapter')
+const { createAirpayPayment, submitToAirpay } = await import('./airpay-adapter')
 
 interface Sent {
   url: string
@@ -63,7 +63,6 @@ describe('the contact the shopper typed reaches the request body', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
-      merchant: 1,
       contact: { email: 'customer@example.com', phone: '' },
     })
 
@@ -77,7 +76,6 @@ describe('the contact the shopper typed reaches the request body', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
-      merchant: 1,
       contact: { email: '', phone: '9876543210' },
     })
 
@@ -89,7 +87,6 @@ describe('the contact the shopper typed reaches the request body', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
-      merchant: 1,
       contact: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' },
     })
 
@@ -103,7 +100,6 @@ describe('the contact the shopper typed reaches the request body', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
-      merchant: 1,
       contact: { email: 'customer@example.com', phone: '' },
     })
 
@@ -123,7 +119,6 @@ describe('pricing stays server-authoritative', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
-      merchant: 1,
       contact: { email: 'customer@example.com' },
     })
 
@@ -131,15 +126,10 @@ describe('pricing stays server-authoritative', () => {
     for (const forbidden of ['amount', 'price', 'total', 'subtotal']) {
       expect(body).not.toHaveProperty(forbidden)
     }
-    // Only these four keys cross the boundary. `merchant` is an INDEX the
-    // server validates against an allowlist — never a MID, a credential or a
-    // configuration, none of which exists in the browser to send.
-    expect(Object.keys(body).sort()).toEqual([
-      'contact',
-      'guestToken',
-      'merchant',
-      'serviceSlugs',
-    ])
+    // Only these three keys cross the boundary. There is deliberately no
+    // merchant field: one merchant, chosen by the server from its own
+    // environment, and nothing in the browser that could name or select one.
+    expect(Object.keys(body).sort()).toEqual(['contact', 'guestToken', 'serviceSlugs'])
   })
 
   it('holds no Airpay credential or signing material', async () => {
@@ -147,7 +137,6 @@ describe('pricing stays server-authoritative', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
-      merchant: 1,
       contact: { email: 'customer@example.com' },
     })
 
@@ -158,37 +147,23 @@ describe('pricing stays server-authoritative', () => {
   })
 })
 
-describe('the shopper choice of merchant reaches the request body', () => {
-  it('sends merchant 1 as a bare index and nothing more', async () => {
+describe('the request body names no merchant at all', () => {
+  it('sends no merchant field — the server never offers a choice', async () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
-      merchant: 1,
       contact: { email: 'customer@example.com' },
     })
 
-    expect(sent[0]?.body['merchant']).toBe(1)
+    expect(sent[0]?.body).not.toHaveProperty('merchant')
   })
 
-  it('sends merchant 2 when that option was chosen', async () => {
+  it('sends exactly ONE request for one call', async () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
-      merchant: 2,
-      contact: { email: 'customer@example.com' },
-    })
-
-    expect(sent[0]?.body['merchant']).toBe(2)
-  })
-
-  it('sends exactly ONE request for one call — never one per merchant', async () => {
-    const { sent } = captureFetch()
-
-    await createAirpayPayment({
-      serviceSlugs: ['airpay-integration-test'],
-      merchant: 2,
       contact: { email: 'customer@example.com' },
     })
 
@@ -197,17 +172,17 @@ describe('the shopper choice of merchant reaches the request body', () => {
     expect(sent).toHaveLength(1)
   })
 
-  it('20. carries no MID, credential or gateway configuration', async () => {
+  it('carries no MID, credential or gateway configuration', async () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
-      merchant: 2,
       contact: { email: 'customer@example.com' },
     })
 
     const serialised = JSON.stringify(sent[0]?.body)
-    // The real MIDs, and anything shaped like a credential or an override.
+    // The live MID, the retired one, and anything shaped like a credential or
+    // an override.
     for (const forbidden of [
       '368250',
       '362380',
@@ -223,5 +198,57 @@ describe('the shopper choice of merchant reaches the request body', () => {
     ]) {
       expect(serialised).not.toContain(forbidden)
     }
+  })
+})
+
+describe('submitToAirpay hands off in THIS tab (§7.6, §14.3)', () => {
+  it('forwards the signed fields verbatim, into no named window', () => {
+    const forms: Array<{ target: string; fields: Record<string, string> }> = []
+
+    const doc = {
+      createElement: (tag: string) => {
+        if (tag === 'form') {
+          const form = {
+            method: '',
+            action: '',
+            target: '',
+            style: {} as Record<string, string>,
+            children: [] as Array<{ name: string; value: string }>,
+            appendChild(child: { name: string; value: string }) {
+              form.children.push(child)
+            },
+            submit() {
+              const fields: Record<string, string> = {}
+              for (const child of form.children) fields[child.name] = child.value
+              forms.push({ target: form.target, fields })
+            },
+          }
+          return form as unknown as HTMLFormElement
+        }
+        return { type: '', name: '', value: '' } as unknown as HTMLInputElement
+      },
+      body: { appendChild: () => {} },
+    } as unknown as Document
+
+    submitToAirpay(
+      {
+        orderRef: 'AM-ABCDE-12345678',
+        accessToken: 'tok',
+        amount: 1499,
+        actionUrl: 'https://payments.airpay.co.in/pay/v4/?token=x',
+        fields: { encdata: 'sealed', checksum: 'sum', merchant_id: '368250' },
+      },
+      doc,
+    )
+
+    expect(forms).toHaveLength(1)
+    // No target: the hosted page loads in this tab, and Airpay returns the
+    // browser here itself.
+    expect(forms[0]?.target).toBe('')
+    expect(forms[0]?.fields).toEqual({
+      encdata: 'sealed',
+      checksum: 'sum',
+      merchant_id: '368250',
+    })
   })
 })

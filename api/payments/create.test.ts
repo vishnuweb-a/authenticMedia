@@ -73,17 +73,13 @@ function mockRes(): { res: ApiResponse; captured: Captured } {
 }
 
 /**
- * A POST whose body already carries a merchant selection (§2.4).
+ * A POST to the create endpoint.
  *
- * The handler requires one and refuses the request without it, so every case
- * below that is about something ELSE — pricing, contact, the envelope — states
- * merchant 1 by default and keeps testing exactly what it always tested. A
- * case that is about the selection passes its own `merchant` and overrides it.
+ * The body carries no merchant field: there is one merchant, and the server
+ * loads it from its own environment.
  */
 function post(body: unknown): ApiRequest {
-  const merged =
-    body !== null && typeof body === 'object' ? { merchant: 1, ...(body as object) } : body
-  return { method: 'POST', headers: {}, body: merged } as ApiRequest
+  return { method: 'POST', headers: {}, body } as ApiRequest
 }
 
 function fieldsOf(body: unknown): Record<string, string> {

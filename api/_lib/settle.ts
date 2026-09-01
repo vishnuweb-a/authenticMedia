@@ -3,7 +3,6 @@ import { verifySecureHash } from './airpay-crypto.js'
 import { isLiveMid, loadAirpayConfig, type AirpayConfig } from './config.js'
 import { findOrderByRef, settleOrderRow } from './db.js'
 import { logEvent } from './log.js'
-import { merchantForOrderRef } from './order-ref.js'
 
 /**
  * Settlement — the ONLY place an order may be marked paid (AIPAY-DOCS §10).
@@ -81,18 +80,14 @@ export async function settleOrder(
 ): Promise<SettleResult> {
   const { orderRef } = payload
 
-  // The merchant is recovered from OUR OWN order reference (§2.4) — the string
-  // the server generated at checkout and stored on the row. Never from the
-  // callback body, never from the request, never from the environment's
-  // current default, which may since have been switched to the other merchant
-  // while this order was still pending.
+  // The one merchant's credentials. There is nothing to select and nothing to
+  // recover from the order reference: every order this application creates is
+  // signed by MID 368250, and all three settlement paths — callback,
+  // success-page poll and reconciliation sweep — therefore verify against the
+  // same credentials that created the payment, by construction.
   //
-  // This is what makes all three settlement paths — callback, success-page
-  // poll and reconciliation sweep — reach for the SAME credentials that
-  // created the payment. It selects which merchant is ASKED; Order
-  // Confirmation still decides, and an order the asked merchant never issued
-  // simply comes back inconclusive (§11.3).
-  const config = injectedConfig ?? loadAirpayConfig(merchantForOrderRef(orderRef))
+  // Order Confirmation still decides. This only determines who is ASKED.
+  const config = injectedConfig ?? loadAirpayConfig()
 
   // 1. Load the order.
   const order = await findOrderByRef(orderRef)
@@ -186,7 +181,7 @@ export async function settleOrder(
   //    different door. §11.4 documents exactly three codes (200, 211, 400);
   //    anything else is the gateway saying something we do not understand, and
   //    a blanket `!== STATUS_SUCCESS` turns that into a terminal `failed`
-  //    exactly as `null !== 200` once did. Order AM2-MAJUV-d7557745 was
+  //    exactly as `null !== 200` once did. A real order was
   //    destroyed that way by a TRANSACTIONSTATUS of 503 — a transient
   //    gateway condition, terminally recorded as a customer's failed payment
   //    and unrecoverable by the running system.

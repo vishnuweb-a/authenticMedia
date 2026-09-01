@@ -855,55 +855,34 @@ redirect back to this same deployment — **never as a trust signal**. Build the
 by concatenation, not `new URL`, which throws on the bare relative path an
 unresolvable origin leaves behind.
 
-### 14.3 When Airpay will not bring the browser back (merchant 2)
+### 14.3 The browser return
 
-Per §8.1 the Response URL is resolved **per MID from the dashboard**. MID 362380
-registers KKChat as *both* its Response and its IPN URL, at the client's explicit
-requirement:
+Per §8.1 the Response URL is resolved **per MID from the dashboard**. MID 368250
+registers this application:
 
 ```
-https://kkchat.in/callback/cpm/arp/collection
+https://authenticmedia.fun/callback/cpm/arp_frontiva/collection
 ```
 
-That URL is not ours to change. The consequence is structural: when the shopper
-finishes paying, Airpay POSTs **the browser** to KKChat, KKChat answers `200
-success` (§13.2 — it answers 200 to anything ending `/collection`), and the
-browser stops there. It never reaches `/order-success`, so the success-page poll
-— which for merchant 2 is the *only* prompt to settle, no callback reaching us at
-all — never runs, and the order waits for the 03:00 sweep.
+so Airpay POSTs the browser back here itself, the callback route answers `303` to
+`/order-success?ref=…&t=…`, and the success page asks `/api/orders/status` what
+actually happened. This is the production-proven flow and the **only** hand-off
+style: a full-tab POST to the hosted page, with no payment window, no polling tab
+and no `returnsToSite` field on the create response.
 
-There is no return-URL field in the §7.3 payload to override this with, and
-adding one is not within the Airpay contract.
+There is no return-URL field in the §7.3 payload, and adding one is not within
+the Airpay contract — Airpay ignores anything sent at transaction time and reads
+its dashboard. The redirect that comes back carries **no claim** about the
+payment: it names the order and the order's opaque read key, and the outcome
+comes only from Order Confirmation.
 
-**The fix is to never give the tab away.** The browser return is arranged
-*before* the hand-off, on our own page, not requested from Airpay:
-
-- merchant 1 → unchanged: full-tab POST, Airpay returns the browser here;
-- merchant 2 → the hosted page opens in a **separate window** and our tab stays
-  put, polling `/api/orders/status`. When that resolves, our tab navigates
-  *itself* to `/order-success?ref=…&t=…`.
-
-The server states which style applies, as `returnsToSite` on the create
-response, derived from the merchant it just chose. The client never sends it.
-
-Properties this preserves:
-
-- **the dashboard is untouched** — Airpay's configuration for both MIDs is
-  exactly what the client specified;
-- **KKChat still receives the merchant-2 callback**, directly from Airpay, in the
-  shape it already expects. We are not in that path and relay nothing (§13.8);
-- **no new settlement path.** The waiting tab calls the same `/api/orders/status`
-  the success page has always called, which runs the same single `settleOrder`
-  against Order Confirmation. It is a new *trigger location* for an existing
-  trusted path, not a second path;
-- **nothing in the browser decides anything.** The payment window is on a foreign
-  origin and is never read; the poll is authoritative.
-
-The window must be opened **synchronously inside the click gesture**, before the
-`create` request is awaited, or popup blockers refuse it. If it is refused
-anyway, fall back to the full-tab hand-off: the shopper ends on KKChat's page,
-which is worse, but the payment is never lost — settlement does not depend on
-that browser.
+> **Historical.** A second merchant (MID 362380) once registered KKChat as both
+> its Response and IPN URL, so Airpay never navigated that shopper back here. The
+> application worked around it by opening the hosted page in a separate window
+> and polling from the tab it kept. That merchant, that window and that polling
+> panel have all been removed: the application is standardised on MID 368250 and
+> there is one merchant, one callback URL and one hand-off style. Retained only
+> so the removed mechanism is recognisable if it turns up in an old deployment.
 
 ---
 

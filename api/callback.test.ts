@@ -53,7 +53,6 @@ const ORDER_REF = 'AM-EMF8G-99999999'
 const TOKEN = '11111111-1111-4111-8111-111111111111'
 
 const CONFIG: AirpayConfig = {
-  merchant: 1,
   mid: MID,
   clientId: 'client-id-placeholder',
   secretKey: 'oauth-secret-placeholder',

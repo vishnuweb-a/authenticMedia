@@ -28,17 +28,14 @@ export interface CheckoutMerchantChoiceProps {
 const OPTIONS: ReadonlyArray<{
   readonly value: AirpayMerchantChoice
   readonly label: string
-  readonly description: string
 }> = [
   {
     value: 1,
     label: 'Pay with airpay',
-    description: 'Pay securely by card, UPI, net banking or wallet.',
   },
   {
     value: 2,
     label: 'Pay with airpay',
-    description: 'A second Airpay gateway. Use this if the primary one fails.',
   },
 ]
 
@@ -89,9 +86,6 @@ export function CheckoutMerchantChoice({
               <span className="min-w-0">
                 <span className="block text-[14px] font-semibold text-text">
                   {option.label}
-                </span>
-                <span className="mt-0.5 block text-[12.5px] leading-snug text-text-subtle">
-                  {option.description}
                 </span>
               </span>
             </label>

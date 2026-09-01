@@ -1,5 +1,5 @@
 import { decrypt } from './airpay-crypto.js'
-import { loadAirpayConfig } from './config.js'
+import { loadAirpayConfig, type MerchantId } from './config.js'
 import { header, type ApiRequest } from './http.js'
 import { FIELD_ALIASES, walkFields } from './walk.js'
 
@@ -205,9 +205,9 @@ function lookup(
   return undefined
 }
 
-function readMid(): string | null {
+function readMid(merchant: MerchantId): string | null {
   try {
-    return loadAirpayConfig().mid
+    return loadAirpayConfig(merchant).mid
   } catch {
     // §9.6 — an incomplete environment reports `unavailable` rather than
     // throwing. It cannot become a way in: with no environment there is no
@@ -227,7 +227,23 @@ function readMid(): string | null {
  *   3. open envelope            → unreadable: STOP
  *   4. order reference present? → no: STOP
  */
-export async function parseCallback(req: ApiRequest): Promise<CallbackParse> {
+export async function parseCallback(
+  req: ApiRequest,
+  /**
+   * Which merchant's receiver this is (§2.4).
+   *
+   * ⚠ Fixed by the ROUTE, never inferred from the payload. Each Airpay
+   * merchant registers its own callback URL in its own dashboard, so the URL
+   * a delivery arrived at is what states the merchant — and it is the one
+   * piece of that statement a forger cannot alter by editing a field.
+   *
+   * The merchant must be known BEFORE decryption, because the key is derived
+   * from that merchant's credentials and the order reference is sealed inside
+   * the envelope. Taking it from the body instead would mean choosing a
+   * decryption key from the very bytes being authenticated.
+   */
+  merchant: MerchantId = 1,
+): Promise<CallbackParse> {
   await hydrateBody(req)
 
   const contentType = header(req, 'content-type') ?? ''
@@ -269,10 +285,10 @@ export async function parseCallback(req: ApiRequest): Promise<CallbackParse> {
   // 2. Merchant check — BEFORE decryption (edge case 17). A callback stating
   //    any merchant other than ours is never opened at all.
   //
-  //    ⚠ The expected MID comes from the server's own environment and nothing
-  //    else. It is not selected by the route, the payload or a request: there
-  //    is one merchant, so there is one right answer, and a delivery claiming
-  //    a different one is rejected outright.
+  //    ⚠ The expected MID comes from the server's own environment, for the
+  //    merchant THIS ROUTE serves. It is never read from the payload, so a
+  //    delivery cannot nominate the credentials it is checked against, and one
+  //    claiming a different merchant is rejected outright.
   //
   //    MERCID is a field of the PAYLOAD, not of the envelope, and is
   //    deliberately absent from these aliases (§9.7).
@@ -280,7 +296,7 @@ export async function parseCallback(req: ApiRequest): Promise<CallbackParse> {
   let merchantCheck: MerchantCheck = 'absent'
 
   if (statedMerchant) {
-    const expected = readMid()
+    const expected = readMid(merchant)
     merchantCheck =
       expected === null ? 'unavailable' : statedMerchant === expected ? 'match' : 'mismatch'
   }
@@ -305,7 +321,7 @@ export async function parseCallback(req: ApiRequest): Promise<CallbackParse> {
   if (sealed) {
     const config = (() => {
       try {
-        return loadAirpayConfig()
+        return loadAirpayConfig(merchant)
       } catch {
         return null
       }

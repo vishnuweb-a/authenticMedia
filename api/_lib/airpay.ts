@@ -1,5 +1,5 @@
 import { buildEnvelope, buildSignedEnvelope, decrypt } from './airpay-crypto.js'
-import { OAUTH_URL, type AirpayConfig } from './config.js'
+import { OAUTH_URL, type AirpayConfig, type MerchantId } from './config.js'
 import { logEvent } from './log.js'
 import { FIELD_ALIASES, pick, walkFields } from './walk.js'
 
@@ -66,18 +66,22 @@ interface CachedToken {
  * flight (§6). On serverless a warm instance reuses it and a cold start mints
  * a new one — no shared infrastructure needed.
  *
- * ⚠ A SINGLE slot, because there is a single merchant. Every token in this
- * process is minted with the one credential set loadAirpayConfig reads, so a
- * warm instance can only ever hand back a token for that same merchant. The
- * slot holds the token, never a credential.
+ * ⚠ Keyed BY MERCHANT (§2.4). A single shared slot would hand merchant 2 a
+ * token minted with merchant 1's credentials the moment a warm instance served
+ * both — Order Confirmation would then be asked about merchant 2's order under
+ * merchant 1's authority, and the answer would be inconclusive at best. With
+ * the merchant now chosen per checkout rather than per deployment, one warm
+ * instance serving both is the NORMAL case, not an edge one.
+ *
+ * The key is the merchant id. The slot holds the token, never a credential.
  */
-let cached: CachedToken | null = null
+const cached = new Map<MerchantId, CachedToken>()
 const TOKEN_TTL_MS = 300_000
 const TOKEN_MARGIN_MS = 60_000
 
 /** Exposed for tests; never called in request paths. */
 export function resetTokenCache(): void {
-  cached = null
+  cached.clear()
 }
 
 /**
@@ -91,7 +95,10 @@ export function resetTokenCache(): void {
  */
 export async function getAccessToken(config: AirpayConfig): Promise<string | null> {
   const now = Date.now()
-  if (cached && cached.expiresAt > now) return cached.token
+  // ⚠ The lookup is per merchant. A hit for merchant 1 is invisible to
+  // merchant 2 and vice versa, so a token can never cross accounts.
+  const hit = cached.get(config.merchant)
+  if (hit && hit.expiresAt > now) return hit.token
 
   // The credentials travel INSIDE encdata, not as plain form fields (§6).
   const envelope = buildEnvelope(
@@ -192,8 +199,8 @@ export async function getAccessToken(config: AirpayConfig): Promise<string | nul
     return null
   }
 
-  cached = { token, expiresAt: now + TOKEN_TTL_MS - TOKEN_MARGIN_MS }
-  logEvent('airpay.oauth.issued')
+  cached.set(config.merchant, { token, expiresAt: now + TOKEN_TTL_MS - TOKEN_MARGIN_MS })
+  logEvent('airpay.oauth.issued', { merchant: config.merchant })
   return token
 }
 

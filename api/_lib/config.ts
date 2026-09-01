@@ -7,15 +7,26 @@
  * value is compiled into the browser bundle. All signing happens here; the
  * browser receives only opaque, already-signed fields (§2.3).
  *
- * ⚠ SINGLE MERCHANT. This application talks to exactly one Airpay merchant,
- * MID 368250, whose credentials live in the ORIGINAL unsuffixed variables
- * below. There is no merchant index, no `_2` credential set, no
- * AIRPAY_ACTIVE_MERCHANT switch and nothing anywhere that chooses between two
- * configurations — not in a request, not in the environment, not from an order
- * reference. A payment can only ever be signed by this one account.
+ * ⚠ TWO MERCHANTS, chosen BY THE SHOPPER (§2.4). The customer picks one of
+ * two Airpay payment options at checkout and the server maps that choice onto
+ * one of two credential sets it holds itself. There is deliberately no global
+ * environment switch naming an active merchant: such a variable would override
+ * the customer's own choice, which is precisely what this design prevents. The
+ * merchant is always passed in by a caller that validated it.
  */
 
+/**
+ * Which of the two Airpay merchant accounts a value belongs to (§2.4).
+ *
+ * `1` is the original, production-proven merchant (MID 368250) and is the
+ * default selection at checkout. `2` is the second account (MID 362380), whose
+ * credentials live in the `_2`-suffixed variables.
+ */
+export type MerchantId = 1 | 2
+
 export interface AirpayConfig {
+  /** Which credential set this config was loaded from. */
+  readonly merchant: MerchantId
   readonly mid: string
   readonly clientId: string
   /** OAuth2 client_secret. NOT the privatekey secret — see below. */
@@ -60,10 +71,20 @@ export const OAUTH_URL = 'https://kraken.airpay.co.in/airpay/pay/v4/api/oauth2/'
 export const HOSTED_PAYMENT_URL = 'https://payments.airpay.co.in/pay/v4/'
 
 /**
- * Loads and validates the Airpay credentials.
+ * The environment-variable suffix for a merchant (§2.4).
  *
- * ⚠ The variable names are the ORIGINAL unsuffixed ones and are not ours to
- * rename: they are live in production for MID 368250.
+ * Merchant 1 reads the ORIGINAL unsuffixed names and must keep doing so: those
+ * variables are live in production for MID 368250 and are not ours to rename.
+ * Merchant 2 reads the same names with `_2` appended. Nothing else differs —
+ * both sets are read through the same `required()`, so a missing credential in
+ * either fails closed and names only the variable, never its value.
+ */
+function suffix(merchant: MerchantId): string {
+  return merchant === 1 ? '' : `_${merchant}`
+}
+
+/**
+ * Loads and validates one merchant's Airpay credentials.
  *
  * ⚠ PROVEN (§2.2) — the two secrets are swapped relative to Airpay's own
  * onboarding. Against the live gateway:
@@ -73,25 +94,64 @@ export const HOSTED_PAYMENT_URL = 'https://payments.airpay.co.in/pay/v4/'
  *
  * Each credential is used in exactly one role. Do not swap them back.
  *
- * Takes no argument and consults nothing but the environment. There is no
- * second credential set to select between, so a caller cannot ask for one.
+ * ⚠ The merchant is passed IN, by a caller that has already validated it —
+ * either from parseMerchantSelection (a new order) or from merchantForOrderRef
+ * (an existing one). It is never read from the environment: a global switch
+ * would silently override the customer's own checkout choice.
+ *
+ * AIRPAY_ENV is deliberately NOT suffixed: it states which Airpay world this
+ * deployment talks to, and one deployment cannot be live for one merchant and
+ * sandbox for the other. A single value keeps §10.3's live-MID guard
+ * unambiguous for both.
  */
-export function loadAirpayConfig(): AirpayConfig {
+export function loadAirpayConfig(merchant: MerchantId = 1): AirpayConfig {
   const env = required('AIRPAY_ENV').toLowerCase()
   if (env !== 'live' && env !== 'sandbox') {
     throw new ConfigError('AIRPAY_ENV must be exactly "live" or "sandbox"')
   }
 
+  const s = suffix(merchant)
+
   return {
-    mid: required('AIRPAY_MID'),
-    clientId: required('AIRPAY_CLIENT_ID'),
-    secretKey: required('AIRPAY_SECRET_KEY'),
-    apiKey: required('AIRPAY_API_KEY'),
-    username: required('AIRPAY_USERNAME'),
-    password: required('AIRPAY_PASSWORD'),
+    merchant,
+    mid: required(`AIRPAY_MID${s}`),
+    clientId: required(`AIRPAY_CLIENT_ID${s}`),
+    secretKey: required(`AIRPAY_SECRET_KEY${s}`),
+    apiKey: required(`AIRPAY_API_KEY${s}`),
+    username: required(`AIRPAY_USERNAME${s}`),
+    password: required(`AIRPAY_PASSWORD${s}`),
     env,
+    // The verify URL override is shared: it points at Airpay's gateway, which
+    // is the same host for every merchant.
     verifyUrl: optional('AIRPAY_VERIFY_URL') ?? DEFAULT_VERIFY_URL,
   }
+}
+
+/**
+ * Validates a client-supplied merchant selection (§2.4).
+ *
+ * ⚠ This is the ONLY thing a browser may say about the merchant, and it is an
+ * INDEX, not a configuration. The allowlist below is exhaustive: exactly `1`
+ * and `2`, as a number or as its decimal string, and nothing else. Anything
+ * unrecognised — a MID, a credential, a merchant object, a callback URL, `0`,
+ * `3`, `"02"`, ` "2" `, `true`, null, an array — returns null and the caller
+ * refuses the request. The index is then mapped HERE to a credential set the
+ * server reads from its own environment, so the client selects which of two
+ * server-held configurations signs its payment and can neither name nor
+ * influence what is inside either one.
+ *
+ * ⚠ It decides which merchant takes a NEW order, and nothing else. Once the
+ * order exists, its merchant comes from the order reference
+ * (merchantForOrderRef) forever — never from a request, and never from the
+ * environment.
+ *
+ * Deliberately NO default. A missing selection is a rejected request, not a
+ * guess: guessing is how a payment ends up signed by a merchant nobody chose.
+ */
+export function parseMerchantSelection(value: unknown): MerchantId | null {
+  if (value === 1 || value === '1') return 1
+  if (value === 2 || value === '2') return 2
+  return null
 }
 
 /**

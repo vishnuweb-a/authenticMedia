@@ -62,6 +62,7 @@ describe('the contact the shopper typed reaches the request body', () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
+      merchant: 1,
       serviceSlugs: ['airpay-integration-test'],
       contact: { email: 'customer@example.com', phone: '' },
     })
@@ -75,6 +76,7 @@ describe('the contact the shopper typed reaches the request body', () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
+      merchant: 1,
       serviceSlugs: ['airpay-integration-test'],
       contact: { email: '', phone: '9876543210' },
     })
@@ -86,6 +88,7 @@ describe('the contact the shopper typed reaches the request body', () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
+      merchant: 1,
       serviceSlugs: ['airpay-integration-test'],
       contact: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' },
     })
@@ -99,6 +102,7 @@ describe('the contact the shopper typed reaches the request body', () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
+      merchant: 1,
       serviceSlugs: ['airpay-integration-test'],
       contact: { email: 'customer@example.com', phone: '' },
     })
@@ -118,6 +122,7 @@ describe('pricing stays server-authoritative', () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
+      merchant: 1,
       serviceSlugs: ['airpay-integration-test'],
       contact: { email: 'customer@example.com' },
     })
@@ -126,16 +131,23 @@ describe('pricing stays server-authoritative', () => {
     for (const forbidden of ['amount', 'price', 'total', 'subtotal']) {
       expect(body).not.toHaveProperty(forbidden)
     }
-    // Only these three keys cross the boundary. There is deliberately no
-    // merchant field: one merchant, chosen by the server from its own
-    // environment, and nothing in the browser that could name or select one.
-    expect(Object.keys(body).sort()).toEqual(['contact', 'guestToken', 'serviceSlugs'])
+    // Only these FOUR keys cross the boundary, and `merchant` is a bare index
+    // (§2.4). There is no price, no total, no order reference and no
+    // credential — nothing the browser could state that the server would then
+    // have to decide whether to trust.
+    expect(Object.keys(body).sort()).toEqual([
+      'contact',
+      'guestToken',
+      'merchant',
+      'serviceSlugs',
+    ])
   })
 
   it('holds no Airpay credential or signing material', async () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
+      merchant: 1,
       serviceSlugs: ['airpay-integration-test'],
       contact: { email: 'customer@example.com' },
     })
@@ -147,22 +159,28 @@ describe('pricing stays server-authoritative', () => {
   })
 })
 
-describe('the request body names no merchant at all', () => {
-  it('sends no merchant field — the server never offers a choice', async () => {
-    const { sent } = captureFetch()
+describe('the request body names a merchant INDEX, and nothing more', () => {
+  it('sends the shopper selection as a bare index', async () => {
+    for (const merchant of [1, 2] as const) {
+      const { sent } = captureFetch()
 
-    await createAirpayPayment({
-      serviceSlugs: ['airpay-integration-test'],
-      contact: { email: 'customer@example.com' },
-    })
+      await createAirpayPayment({
+        merchant,
+        serviceSlugs: ['airpay-integration-test'],
+        contact: { email: 'customer@example.com' },
+      })
 
-    expect(sent[0]?.body).not.toHaveProperty('merchant')
+      // An INDEX — never a MID, a credential or a configuration. The server
+      // validates it against an exhaustive allowlist and maps it itself.
+      expect(sent[0]?.body).toHaveProperty('merchant', merchant)
+    }
   })
 
   it('sends exactly ONE request for one call', async () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
+      merchant: 1,
       serviceSlugs: ['airpay-integration-test'],
       contact: { email: 'customer@example.com' },
     })
@@ -176,6 +194,7 @@ describe('the request body names no merchant at all', () => {
     const { sent } = captureFetch()
 
     await createAirpayPayment({
+      merchant: 1,
       serviceSlugs: ['airpay-integration-test'],
       contact: { email: 'customer@example.com' },
     })
@@ -237,6 +256,7 @@ describe('submitToAirpay hands off in THIS tab (§7.6, §14.3)', () => {
         amount: 1499,
         actionUrl: 'https://payments.airpay.co.in/pay/v4/?token=x',
         fields: { encdata: 'sealed', checksum: 'sum', merchant_id: '368250' },
+        returnsToSite: true,
       },
       doc,
     )

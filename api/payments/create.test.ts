@@ -75,11 +75,18 @@ function mockRes(): { res: ApiResponse; captured: Captured } {
 /**
  * A POST to the create endpoint.
  *
- * The body carries no merchant field: there is one merchant, and the server
- * loads it from its own environment.
+ * Every request carries an explicit merchant selection, because the server
+ * requires one and refuses the request otherwise (§2.4). These cases are all
+ * about the REST of the flow — pricing, contact, signing — so they select
+ * merchant 1 and hold it constant. Merchant selection itself is covered in
+ * api/payments/merchant-selection.test.ts.
  */
 function post(body: unknown): ApiRequest {
-  return { method: 'POST', headers: {}, body } as ApiRequest
+  const withMerchant =
+    body !== null && typeof body === 'object' && !Array.isArray(body)
+      ? { merchant: 1, ...(body as Record<string, unknown>) }
+      : body
+  return { method: 'POST', headers: {}, body: withMerchant } as ApiRequest
 }
 
 function fieldsOf(body: unknown): Record<string, string> {

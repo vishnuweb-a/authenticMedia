@@ -21,11 +21,14 @@ export type {
 export {
   createAirpayPayment,
   fetchOrderStatus,
+  openPaymentWindow,
+  PAYMENT_WINDOW_NAME,
   paymentService,
   submitToAirpay,
 } from './payment'
 export type {
   AirpayHandoff,
+  AirpayMerchantChoice,
   CreateAirpayPaymentInput,
   CreatePaymentInput,
   OrderPaymentState,

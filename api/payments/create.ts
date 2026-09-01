@@ -1,7 +1,7 @@
 import { buildSignedEnvelope } from '../_lib/airpay-crypto.js'
 import { getAccessToken } from '../_lib/airpay.js'
 import { hasContact, normaliseContact } from '../_lib/contact.js'
-import { HOSTED_PAYMENT_URL, loadAirpayConfig } from '../_lib/config.js'
+import { HOSTED_PAYMENT_URL, loadAirpayConfig, parseMerchantSelection } from '../_lib/config.js'
 import { getServiceClient } from '../_lib/db.js'
 import { noStore, type ApiRequest, type ApiResponse } from '../_lib/http.js'
 import { logEvent } from '../_lib/log.js'
@@ -20,6 +20,20 @@ import { generateOrderRef } from '../_lib/order-ref.js'
 
 interface CreateBody {
   serviceSlugs?: unknown
+  /**
+   * Which of the two Airpay merchants the shopper chose at checkout (§2.4).
+   *
+   * ⚠ An INDEX — `1` or `2` — and never a credential, a MID, a config, a
+   * verify URL or a callback URL. It is validated against an exhaustive
+   * allowlist by parseMerchantSelection and then mapped, server-side, onto a
+   * credential set held only in this function's environment. The browser
+   * therefore chooses BETWEEN two server-defined merchants; it cannot define
+   * one, name one, or reach inside one.
+   *
+   * ⚠ Required. There is no default: an absent or unrecognised value is a 400,
+   * so a payment is never signed by a merchant nobody selected.
+   */
+  merchant?: unknown
   /**
    * The shopper's guest session id. public.orders requires exactly one owner
    * (user_id or guest_token), and this flow is guest checkout.
@@ -97,22 +111,42 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return
   }
 
-  // ⚠ ONE merchant. Nothing in the request touches it — no merchant index, no
-  // MID, no username, no password, no client id, no secret, no verify URL, no
-  // callback URL. Every one of those is ignored by construction, because none
-  // of them is read from the body anywhere in this file; the credentials come
-  // from this function's own environment and from nowhere else.
+  // ⚠ The shopper picked one of the two Airpay options at checkout (§2.4).
+  // What arrives is an INDEX and is treated as untrusted input: it passes an
+  // exhaustive 1|2 allowlist, and only then does the SERVER map it onto a
+  // credential set read from its own environment. Nothing else in the request
+  // touches the merchant — no MID, no username, no password, no client id, no
+  // secret, no verify URL, no callback URL, no order reference. Every one of
+  // those is ignored by construction, because none of them is read from the
+  // body anywhere in this file.
+  //
+  // ⚠ No default, and no global switch. An absent, malformed or
+  // out-of-range selection is refused rather than guessed, so one checkout
+  // action creates one order for exactly one merchant, or none at all.
+  const merchant = parseMerchantSelection(body?.merchant)
+  if (merchant === null) {
+    // Validation detail stays server-side (§7.2).
+    res.status(400).json({ error: 'invalid_request' })
+    return
+  }
+
   let config
   try {
-    config = loadAirpayConfig()
+    config = loadAirpayConfig(merchant)
   } catch {
     // Names only — never the value, and never which credential (§9.8).
-    logEvent('payment.create.misconfigured')
+    logEvent('payment.create.misconfigured', { merchant })
     res.status(503).json({ error: 'payments_unavailable' })
     return
   }
 
-  const orderRef = generateOrderRef()
+  // ⚠ Generated HERE, by the server, from the merchant the server validated.
+  // The client never supplies an order reference and there is nowhere in the
+  // body for one: a forged `orderRef` field is ignored because it is never
+  // read. The reference carries the merchant, is stored with the row, and is
+  // decoded back out by every settlement path — so an order settles against
+  // the merchant that created it, whatever a later shopper selects.
+  const orderRef = generateOrderRef(Date.now(), merchant)
 
   try {
     const supabase = getServiceClient()
@@ -152,6 +186,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     // Presence only — never the address or the number (§9.8).
     logEvent('payment.initiated', {
       orderRef,
+      merchant,
       emailPresent: contact.email !== '',
       contactPresent: contact.phone !== '',
     })
@@ -190,6 +225,23 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       amount,
       actionUrl: `${HOSTED_PAYMENT_URL}?token=${encodeURIComponent(token)}`,
       fields,
+      // How the browser gets BACK here after the hosted page (§8.1, §14.3).
+      //
+      // Airpay resolves the Response URL per MID from its own DASHBOARD, never
+      // from anything sent at transaction time — there is no return-URL field
+      // in the payload above, by design. Merchant 1's dashboard points back at
+      // this site, so Airpay brings the shopper home itself. Merchant 2's
+      // points at KKChat, which is the existing configured behaviour and is not
+      // ours to change from here, so Airpay will not return this browser and
+      // the client must keep hold of the tab itself.
+      //
+      // ⚠ Derived from the merchant the SERVER validated and loaded — never
+      // echoed back from the request, which is why a `returnsToSite` sent by a
+      // client is ignored outright. It carries NO claim about any payment: it
+      // selects a navigation style and nothing else, so a tampered value can at
+      // worst give the shopper a worse hand-off. What decides whether an order
+      // is paid is Order Confirmation, always.
+      returnsToSite: config.merchant === 1,
     })
   } catch {
     logEvent('payment.create.error', { orderRef })

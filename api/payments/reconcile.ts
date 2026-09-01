@@ -1,6 +1,7 @@
 import { findUnsettledOrders } from '../_lib/db.js'
 import { header, noStore, safeEqual, type ApiRequest, type ApiResponse } from '../_lib/http.js'
 import { logEvent } from '../_lib/log.js'
+import { isLegacyMerchantOrderRef } from '../_lib/order-ref.js'
 import { settleOrder, type SettleOutcome } from '../_lib/settle.js'
 
 /**
@@ -54,7 +55,26 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
   const counts: Partial<Record<SettleOutcome, number>> = {}
 
+  let legacySkipped = 0
+
   for (const order of orders) {
+    // Historical rows from the RETIRED second-merchant experiment, identified
+    // by prefix AND creation date — never by prefix alone, because merchant 2
+    // is offered again and its new orders carry the same `AM2-` prefix and are
+    // swept exactly like any other.
+    //
+    // Skipped BEFORE the round trip, not just refused inside settleOrder: this
+    // sweep is the one caller that re-reads the same unsettled rows on every
+    // run, and these three are records of a closed experiment.
+    //
+    // Skipping is READ-ONLY. Nothing is written, renamed or reassigned — they
+    // simply stay the historical records they are, and stop generating a
+    // pointless outbound call on every sweep.
+    if (isLegacyMerchantOrderRef(order.reference, order.createdAt)) {
+      legacySkipped += 1
+      continue
+    }
+
     try {
       // A SYNTHETIC payload carrying only the reference — every other field
       // absent. settleOrder then skips the integrity check and decides purely
@@ -74,7 +94,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     pending: counts.pending ?? 0,
     requires_review: counts.requires_review ?? 0,
     already_settled: counts.already_settled ?? 0,
+    legacy_skipped: legacySkipped,
   })
 
-  res.status(200).json({ scanned: orders.length, outcomes: counts })
+  res.status(200).json({
+    scanned: orders.length,
+    outcomes: counts,
+    legacySkipped,
+  })
 }

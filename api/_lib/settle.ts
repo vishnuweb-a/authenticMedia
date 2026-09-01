@@ -2,6 +2,7 @@ import { verifyTransaction, type VerifiedTransaction } from './airpay.js'
 import { verifySecureHash } from './airpay-crypto.js'
 import { isLiveMid, loadAirpayConfig, type AirpayConfig } from './config.js'
 import { findOrderByRef, settleOrderRow } from './db.js'
+import { isLegacyMerchantOrderRef, merchantForOrderRef } from './order-ref.js'
 import { logEvent } from './log.js'
 
 /**
@@ -25,6 +26,7 @@ export type SettleOutcome =
   | 'unknown_order'
   | 'hash_mismatch'
   | 'unverifiable'
+  | 'legacy_merchant'
 
 export interface SettleResult {
   readonly outcome: SettleOutcome
@@ -80,14 +82,20 @@ export async function settleOrder(
 ): Promise<SettleResult> {
   const { orderRef } = payload
 
-  // The one merchant's credentials. There is nothing to select and nothing to
-  // recover from the order reference: every order this application creates is
-  // signed by MID 368250, and all three settlement paths — callback,
-  // success-page poll and reconciliation sweep — therefore verify against the
-  // same credentials that created the payment, by construction.
+  // ⚠ The merchant comes from the ORDER REFERENCE, and from nothing else
+  // (§2.4). Not from the request, not from the environment, and never from the
+  // shopper's current checkout selection — which belongs to whatever they are
+  // buying NOW and says nothing about an order created minutes or days ago.
+  //
+  // This is what makes the three settlement paths agree. The callback, the
+  // success-page poll and the cron sweep all run outside the browser session
+  // that chose the merchant; the reference is the only thing all three hold,
+  // it is persisted on the row, and it is immutable. So each one reaches for
+  // the SAME credentials that created the payment.
   //
   // Order Confirmation still decides. This only determines who is ASKED.
-  const config = injectedConfig ?? loadAirpayConfig()
+  const merchant = merchantForOrderRef(orderRef)
+  const config = injectedConfig ?? loadAirpayConfig(merchant)
 
   // 1. Load the order.
   const order = await findOrderByRef(orderRef)
@@ -102,6 +110,37 @@ export async function settleOrder(
   if (TERMINAL.has(order.status)) {
     logEvent('payment.callback.duplicate', { orderRef, status: order.status })
     return { outcome: 'already_settled', orderRef, paymentStatus: order.status }
+  }
+
+  // 2b. HISTORICAL RECORD from the RETIRED second-merchant experiment.
+  //
+  //     Merchant 2 is a live checkout option again, so an `AM2-` reference on
+  //     its own no longer means "historical" — it is the ordinary reference
+  //     format for every new merchant-2 order, and those settle normally
+  //     through the code below under MID 362380's own credentials.
+  //
+  //     What is still historical is the five rows created BEFORE merchant 2 was
+  //     re-enabled (isLegacyMerchantOrderRef checks the row's creation
+  //     timestamp against the cutoff, not just its prefix). They were left
+  //     mid-flight when the merchant was withdrawn, three of them still
+  //     pending_payment and inside the reconciliation sweep's window, and they
+  //     are records of a closed experiment rather than orders anyone is
+  //     waiting on. Re-verifying them now would reopen settlement on payments
+  //     abandoned a merchant-withdrawal ago.
+  //
+  //     Post-cutoff `AM2-` rows — including merchant-2 integration tests — are
+  //     NOT historical and fall through to the settlement path below, on the
+  //     evidence of Order Confirmation alone. No individual reference is
+  //     special-cased here.
+  //
+  //     ⚠ This is a REFUSAL TO ACT, not a conversion. The row is read and left
+  //     exactly as it is: no rename, no rewrite, no reassignment, and no write
+  //     of any kind on this path. It never becomes paid, never becomes failed,
+  //     and its recorded status is returned untouched — the same fail-closed
+  //     discipline as the sandbox guard below (§10.3).
+  if (isLegacyMerchantOrderRef(orderRef, order.createdAt)) {
+    logEvent('payment.settle.legacy_merchant', { orderRef, status: order.status })
+    return { outcome: 'legacy_merchant', orderRef, paymentStatus: order.status }
   }
 
   // 3. Integrity check, when an integrity claim was supplied.

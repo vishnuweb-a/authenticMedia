@@ -10,14 +10,15 @@ export interface CheckoutMerchantChoiceProps {
 }
 
 /**
- * The two Airpay payment options (AIPAY-DOCS §2.4).
+ * The Airpay payment options (AIPAY-DOCS §2.4), of which only the ones listed
+ * in `OFFERED` are shown.
  *
  * ⚠ Native radios in a single `name` group, so the browser itself enforces
  * that exactly one is chosen: there is no state in which both are selected and
  * no way for one checkout action to reach two merchants. The visible cards are
  * the label of their own input, which keeps the whole card clickable while the
- * control stays a real radio — arrow-key navigable, announced as "1 of 2", and
- * focusable without any ARIA of our own.
+ * control stays a real radio — arrow-key navigable, announced with its position
+ * in the group, and focusable without any ARIA of our own.
  *
  * ⚠ What each option means is a server-side detail. This component knows only
  * `1` and `2`; no MID, credential or gateway URL exists in the browser, so
@@ -42,6 +43,15 @@ const OPTIONS: ReadonlyArray<{
   },
 ]
 
+/**
+ * Which of the options above are actually offered to shoppers.
+ *
+ * ⚠ Presentation only. Merchant 2 stays fully described above and fully
+ * supported by the server — it is simply not shown yet. Re-offering it is a
+ * one-line change (add `2`) with nothing else to undo.
+ */
+const OFFERED: ReadonlyArray<AirpayMerchantChoice> = [1]
+
 export function CheckoutMerchantChoice({
   value,
   disabled,
@@ -56,7 +66,7 @@ export function CheckoutMerchantChoice({
       </legend>
 
       <div className="mt-3 flex flex-col gap-2.5">
-        {OPTIONS.map((option) => {
+        {OPTIONS.filter((option) => OFFERED.includes(option.value)).map((option) => {
           const selected = option.value === value
 
           return (

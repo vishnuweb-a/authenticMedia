@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 
 import { aesKey, privateKey } from './airpay-crypto.js'
-import { activeMerchant, loadAirpayConfig } from './config.js'
+import { loadAirpayConfig, parseMerchantSelection } from './config.js'
 import { generateOrderRef, merchantForOrderRef } from './order-ref.js'
 
 /**
@@ -148,11 +148,11 @@ describe('4. merchant 1 credentials are never replaced by the _2 set', () => {
     expect(a.password).not.toBe(b.password)
   })
 
-  it('is unaffected by AIRPAY_ACTIVE_MERCHANT being set to 2', () => {
-    process.env['AIRPAY_ACTIVE_MERCHANT'] = '2'
-    // The switch chooses which merchant takes NEW orders. It must never
+  it('is unaffected by which merchant a shopper just selected', () => {
+    // A selection chooses which merchant takes ONE new order. It must never
     // rewrite what merchant 1 IS — otherwise pending 368250 orders would
     // settle against the wrong credentials.
+    expect(parseMerchantSelection(2)).toBe(2)
     expect(loadAirpayConfig(1).mid).toBe('368250')
     expect(loadAirpayConfig(1).username).toBe(M1['AIRPAY_USERNAME'])
   })
@@ -202,33 +202,97 @@ describe('5/17. no merchant credential reaches the browser', () => {
   })
 })
 
-describe('16. the merchant switch is server-side and unforgeable', () => {
-  it('defaults to merchant 1 when unset', () => {
-    expect(activeMerchant()).toBe(1)
+describe('16. the merchant selection is an allowlisted index, never a config', () => {
+  it('1/2. accepts exactly 1 and 2, as a number or its decimal string', () => {
+    expect(parseMerchantSelection(1)).toBe(1)
+    expect(parseMerchantSelection(2)).toBe(2)
+    expect(parseMerchantSelection('1')).toBe(1)
+    expect(parseMerchantSelection('2')).toBe(2)
   })
 
-  it('selects merchant 2 only on exactly "2"', () => {
-    process.env['AIRPAY_ACTIVE_MERCHANT'] = '2'
-    expect(activeMerchant()).toBe(2)
-  })
-
-  it('falls back to merchant 1 on any unrecognised value', () => {
-    // A typo must never divert live traffic away from the proven merchant.
-    for (const bad of ['', '  ', '0', '3', 'two', 'true', '02', '362380', 'M362380']) {
-      process.env['AIRPAY_ACTIVE_MERCHANT'] = bad
-      expect(activeMerchant()).toBe(1)
+  it('5. rejects a MISSING selection rather than guessing one', () => {
+    // Documented behaviour: no default. A payment must never be signed by a
+    // merchant nobody chose, and silently picking one is how that happens.
+    for (const missing of [undefined, null, '']) {
+      expect(parseMerchantSelection(missing)).toBeNull()
     }
   })
 
-  it('reads ONLY the environment — no request can influence it', () => {
+  it('6/7. rejects 0 and 3 — the allowlist is exhaustive, not a range', () => {
+    expect(parseMerchantSelection(0)).toBeNull()
+    expect(parseMerchantSelection('0')).toBeNull()
+    expect(parseMerchantSelection(3)).toBeNull()
+    expect(parseMerchantSelection('3')).toBeNull()
+  })
+
+  it('8. rejects an arbitrary MID string, including the two real ones', () => {
+    // A client naming a MID is the whole attack this allowlist exists to stop.
+    for (const mid of ['368250', '362380', 'MID368250', '000000', '99999']) {
+      expect(parseMerchantSelection(mid)).toBeNull()
+    }
+  })
+
+  it('9/10. rejects anything shaped like a credential or a configuration', () => {
+    for (const hostile of [
+      { mid: '368250', username: 'u', password: 'p' },
+      { merchant: 1, secretKey: 's' },
+      { clientId: 'c', apiKey: 'k' },
+      { verifyUrl: 'https://attacker.example/verify/' },
+      ['1'],
+      [1],
+      true,
+      1.0000001,
+      ' 1 ',
+      '01',
+      '1e0',
+      'one',
+      NaN,
+      Infinity,
+      () => 1,
+    ]) {
+      expect(parseMerchantSelection(hostile)).toBeNull()
+    }
+  })
+
+  it('9. a rejected selection cannot smuggle a value into a loaded config', () => {
+    // Even the closest near-miss returns null, so loadAirpayConfig is never
+    // reached with anything but the literal 1 or 2 this function produced.
+    const chosen = parseMerchantSelection({ merchant: 2, mid: '362380' })
+    expect(chosen).toBeNull()
+    // And what a VALID selection produces is a plain index — nothing the caller
+    // sent travels with it.
+    expect(parseMerchantSelection('2')).toBe(2)
+    expect(loadAirpayConfig(2).mid).toBe('362380')
+  })
+
+  it('reads ONLY its argument — no environment switch remains', () => {
     const source = readFileSync('api/_lib/config.ts', 'utf8')
-    const fn = source.slice(source.indexOf('export function activeMerchant'))
+    const fn = source.slice(source.indexOf('export function parseMerchantSelection'))
     const body = fn.slice(0, fn.indexOf('\n}'))
-    // The whole function is one environment read. If a request, body, query,
-    // header or callback field ever appears here, a client could choose the
-    // merchant that signs its payment.
-    expect(body).toContain("optional('AIRPAY_ACTIVE_MERCHANT')")
-    expect(body).not.toMatch(/\breq\b|request|query|header|body|params/i)
+    // The whole function is one allowlist over its own argument. If it ever
+    // read process.env again, two conflicting selection mechanisms would exist.
+    expect(body).not.toContain('process.env')
+    expect(body).not.toContain('AIRPAY_')
+  })
+
+  it('AIRPAY_ACTIVE_MERCHANT is gone and nothing reads it', () => {
+    // The old global switch routed EVERY new payment to one merchant. It is
+    // removed rather than left dormant, so there is exactly one mechanism that
+    // chooses a merchant for a new order: the shopper's validated selection.
+    // Tests are excluded deliberately: two of them NAME the variable in order
+    // to prove it is inert. What must hold is that no shipping code reads it.
+    const offenders = [...walkFiles('api', /\.(ts|js)$/), ...walkFiles('src', /\.(ts|tsx)$/)]
+      .filter((file) => !/\.test\.tsx?$/.test(file))
+      .filter((file) => readFileSync(file, 'utf8').includes('AIRPAY_ACTIVE_MERCHANT'))
+    expect(offenders).toEqual([])
+  })
+
+  it('setting AIRPAY_ACTIVE_MERCHANT has no effect on anything', () => {
+    process.env['AIRPAY_ACTIVE_MERCHANT'] = '2'
+    // It cannot select a merchant, and it cannot rewrite what either one IS.
+    expect(parseMerchantSelection(undefined)).toBeNull()
+    expect(loadAirpayConfig(1).mid).toBe('368250')
+    expect(loadAirpayConfig(2).mid).toBe('362380')
   })
 })
 

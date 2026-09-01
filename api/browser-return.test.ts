@@ -65,8 +65,18 @@ function mockRes(): { res: ApiResponse; captured: Captured } {
   return { res, captured }
 }
 
+/**
+ * A POST whose body already carries a merchant selection (§2.4).
+ *
+ * The handler requires one and refuses the request without it, so every case
+ * below that is about something ELSE — pricing, contact, the envelope — states
+ * merchant 1 by default and keeps testing exactly what it always tested. A
+ * case that is about the selection passes its own `merchant` and overrides it.
+ */
 function post(body: unknown): ApiRequest {
-  return { method: 'POST', headers: {}, body } as ApiRequest
+  const merged =
+    body !== null && typeof body === 'object' ? { merchant: 1, ...(body as object) } : body
+  return { method: 'POST', headers: {}, body: merged } as ApiRequest
 }
 
 const VALID = {
@@ -99,7 +109,6 @@ beforeEach(() => {
   })) {
     process.env[name] = value
   }
-  delete process.env['AIRPAY_ACTIVE_MERCHANT']
 })
 
 describe('the create response states how the browser gets back (§14.3)', () => {
@@ -116,9 +125,8 @@ describe('the create response states how the browser gets back (§14.3)', () => 
   })
 
   it('merchant 2 does NOT return to the site', async () => {
-    process.env['AIRPAY_ACTIVE_MERCHANT'] = '2'
     const { res, captured } = mockRes()
-    await handler(post(VALID), res)
+    await handler(post({ ...VALID, merchant: 2 }), res)
 
     expect(captured.code).toBe(200)
     const body = captured.body as { returnsToSite: boolean; orderRef: string }
@@ -129,12 +137,15 @@ describe('the create response states how the browser gets back (§14.3)', () => 
     expect(body.orderRef).toMatch(/^AM2-/)
   })
 
-  it('is derived from the merchant, never from anything the client sent', async () => {
-    // The hostile shape: a client asking to keep the tab hand-off for what is
-    // about to become a merchant-2 order.
-    process.env['AIRPAY_ACTIVE_MERCHANT'] = '2'
+  it('is derived from the merchant, never from anything else the client sent', async () => {
+    // The hostile shape: a shopper who selected merchant 2 also asking to keep
+    // the full-tab hand-off, which would navigate this tab away to a gateway
+    // that lands on KKChat and never comes back.
+    //
+    // The selection IS the client's to make; `returnsToSite` is not. The server
+    // derives it from the merchant it loaded and ignores the echoed field.
     const { res, captured } = mockRes()
-    await handler(post({ ...VALID, returnsToSite: true, merchant: 1 }), res)
+    await handler(post({ ...VALID, returnsToSite: true, merchant: 2 }), res)
 
     const body = captured.body as { returnsToSite: boolean; orderRef: string }
     expect(body.returnsToSite).toBe(false)
@@ -142,9 +153,8 @@ describe('the create response states how the browser gets back (§14.3)', () => 
   })
 
   it('carries no claim about payment — the order is still only pending', async () => {
-    process.env['AIRPAY_ACTIVE_MERCHANT'] = '2'
     const { res, captured } = mockRes()
-    await handler(post(VALID), res)
+    await handler(post({ ...VALID, merchant: 2 }), res)
 
     const body = captured.body as Record<string, unknown>
     // Nothing in the create response may look like a settled status. What the
@@ -156,9 +166,8 @@ describe('the create response states how the browser gets back (§14.3)', () => 
   })
 
   it('never sends a return URL to Airpay — there is no such field (§7.3)', async () => {
-    process.env['AIRPAY_ACTIVE_MERCHANT'] = '2'
     const { res, captured } = mockRes()
-    await handler(post(VALID), res)
+    await handler(post({ ...VALID, merchant: 2 }), res)
 
     const { decrypt } = await import('./_lib/airpay-crypto.js')
     const { loadAirpayConfig } = await import('./_lib/config.js')

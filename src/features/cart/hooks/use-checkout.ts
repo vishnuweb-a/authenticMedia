@@ -6,6 +6,7 @@ import {
   PAYMENT_WINDOW_NAME,
   submitToAirpay,
 } from '@/services'
+import type { AirpayMerchantChoice } from '@/services'
 import { useCart } from '@/stores'
 import type { CheckoutStatus } from '../types/cart.types'
 import {
@@ -24,6 +25,14 @@ export interface UseCheckoutResult {
   contact: CheckoutContactValues
   contactErrors: CheckoutContactErrors
   setContactValue: (field: keyof CheckoutContactValues, value: string) => void
+  /**
+   * Which of the two Airpay payment options the shopper has chosen (§2.4).
+   *
+   * Exactly one, always — the type admits no third value and no "both", so one
+   * checkout action can only ever create one order for one merchant.
+   */
+  merchant: AirpayMerchantChoice
+  setMerchant: (merchant: AirpayMerchantChoice) => void
   pay: () => Promise<void>
   reset: () => void
   /**
@@ -83,6 +92,9 @@ export function useCheckout(): UseCheckoutResult {
   const [contact, setContact] = useState<CheckoutContactValues>(EMPTY_CONTACT)
   const [contactErrors, setContactErrors] = useState<CheckoutContactErrors>({})
   const [hasAttempted, setHasAttempted] = useState(false)
+  // Merchant 1 is preselected: it is the production-proven account, so the
+  // shopper who changes nothing gets the flow that has always worked.
+  const [merchant, setMerchant] = useState<AirpayMerchantChoice>(1)
   const [awaiting, setAwaiting] = useState<UseCheckoutResult['awaiting']>(null)
 
   const reset = useCallback(() => {
@@ -91,6 +103,7 @@ export function useCheckout(): UseCheckoutResult {
     setContactErrors({})
     setHasAttempted(false)
     setAwaiting(null)
+    setMerchant(1)
   }, [])
 
   const setContactValue = useCallback(
@@ -107,6 +120,13 @@ export function useCheckout(): UseCheckoutResult {
   )
 
   const pay = useCallback(async () => {
+    // ⚠ One click, one order. A second call while the first is still in flight
+    // would create a SECOND order row — and, worse, a second hosted page — for
+    // a single checkout action. The status flag is the guard; the Pay control
+    // is also disabled while pending, but a disabled button is a courtesy and
+    // this is the correctness check.
+    if (status === 'pending') return
+
     setHasAttempted(true)
 
     const errors = validateCheckoutContact(contact)
@@ -131,6 +151,9 @@ export function useCheckout(): UseCheckoutResult {
 
     const created = await createAirpayPayment({
       serviceSlugs: items.map((item) => item.serviceId),
+      // The shopper's single choice, sent as an index. The server validates it
+      // and maps it onto its own credentials; nothing here knows a MID (§2.4).
+      merchant,
       contact: {
         firstName,
         lastName,
@@ -175,7 +198,18 @@ export function useCheckout(): UseCheckoutResult {
     // path, on the same trigger the success page has always used.
     submitToAirpay(handoff, document, PAYMENT_WINDOW_NAME)
     setAwaiting({ orderRef: handoff.orderRef, accessToken: handoff.accessToken })
-  }, [contact, items])
+  }, [contact, items, merchant, status])
 
-  return { status, error, contact, contactErrors, setContactValue, pay, reset, awaiting }
+  return {
+    status,
+    error,
+    contact,
+    contactErrors,
+    setContactValue,
+    merchant,
+    setMerchant,
+    pay,
+    reset,
+    awaiting,
+  }
 }

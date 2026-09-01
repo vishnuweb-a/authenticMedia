@@ -117,24 +117,30 @@ export function loadAirpayConfig(merchant: MerchantId = 1): AirpayConfig {
 }
 
 /**
- * The merchant that takes NEW orders (§2.4).
+ * Validates a client-supplied merchant selection (§2.4).
  *
- * ⚠ Server-side only, and deliberately the ONLY input to the choice. It is
- * read from the environment and from nowhere else — never from a request body,
- * a query parameter, a header, a callback field, the basket, the amount, or
- * anything a browser can influence. A client cannot select a merchant.
+ * ⚠ This is the ONLY thing a browser may say about the merchant, and it is an
+ * INDEX, not a configuration. The allowlist below is exhaustive: exactly `1`
+ * and `2`, as a number or as its decimal string, and nothing else. Anything
+ * unrecognised — a MID, a credential, a merchant object, a callback URL, `0`,
+ * `3`, `"02"`, null, an array — returns null and the caller refuses the
+ * request. The index is then mapped HERE to a credential set the server reads
+ * from its own environment, so the client selects which of two server-held
+ * configurations signs its payment and can neither name nor influence what is
+ * inside either one.
  *
- * Unset, blank or unrecognised means merchant 1. That default is load-bearing:
- * a typo, a missing variable or a stray value must leave the production-proven
- * MID 368250 flow exactly as it is rather than diverting live traffic.
+ * ⚠ It decides which merchant takes a NEW order, and nothing else. Once the
+ * order exists, its merchant comes from the order reference
+ * (merchantForOrderRef) forever — never from a request, and never from the
+ * environment.
  *
- * This is a SWITCH, not a routing policy. It answers "which merchant takes
- * payments from now on"; if traffic must ever be divided between the two by a
- * business rule, that rule replaces this function and nothing else — every
- * other part of the integration derives the merchant from the order reference.
+ * Deliberately NO default. A missing selection is a rejected request, not a
+ * guess: guessing is how a payment ends up signed by a merchant nobody chose.
  */
-export function activeMerchant(): MerchantId {
-  return optional('AIRPAY_ACTIVE_MERCHANT') === '2' ? 2 : 1
+export function parseMerchantSelection(value: unknown): MerchantId | null {
+  if (value === 1 || value === '1') return 1
+  if (value === 2 || value === '2') return 2
+  return null
 }
 
 /**

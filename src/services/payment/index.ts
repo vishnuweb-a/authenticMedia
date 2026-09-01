@@ -16,6 +16,7 @@ export {
 } from './airpay-adapter'
 export type {
   AirpayHandoff,
+  AirpayMerchantChoice,
   CreateAirpayPaymentInput,
   OrderPaymentState,
   OrderStatusResult,

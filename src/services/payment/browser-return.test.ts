@@ -158,14 +158,22 @@ describe('createAirpayPayment reads returnsToSite from the SERVER', () => {
 
   it('carries false through for a merchant-2 order', async () => {
     stub({ returnsToSite: false })
-    const result = await createAirpayPayment({ serviceSlugs: ['s'], contact: { email: 'a@b.c' } })
+    const result = await createAirpayPayment({
+      serviceSlugs: ['s'],
+      merchant: 2,
+      contact: { email: 'a@b.c' },
+    })
     expect(result.ok).toBe(true)
     expect(result.ok && result.data.returnsToSite).toBe(false)
   })
 
   it('carries true through for a merchant-1 order', async () => {
     stub({ returnsToSite: true })
-    const result = await createAirpayPayment({ serviceSlugs: ['s'], contact: { email: 'a@b.c' } })
+    const result = await createAirpayPayment({
+      serviceSlugs: ['s'],
+      merchant: 1,
+      contact: { email: 'a@b.c' },
+    })
     expect(result.ok && result.data.returnsToSite).toBe(true)
   })
 
@@ -173,7 +181,11 @@ describe('createAirpayPayment reads returnsToSite from the SERVER', () => {
     // An older API deployment omits it entirely. That must behave exactly as
     // before rather than silently switching merchant 1 to a popup.
     stub({})
-    const result = await createAirpayPayment({ serviceSlugs: ['s'], contact: { email: 'a@b.c' } })
+    const result = await createAirpayPayment({
+      serviceSlugs: ['s'],
+      merchant: 1,
+      contact: { email: 'a@b.c' },
+    })
     expect(result.ok && result.data.returnsToSite).toBe(true)
   })
 })

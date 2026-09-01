@@ -35,7 +35,7 @@ vi.mock('./_lib/db.js', () => ({
 const { settleOrder } = await import('./_lib/settle.js')
 const { handleAirpayCallback } = await import('./_lib/callback-flow.js')
 const { getAccessToken, resetTokenCache } = await import('./_lib/airpay.js')
-const { loadAirpayConfig } = await import('./_lib/config.js')
+const { loadAirpayConfig, parseMerchantSelection } = await import('./_lib/config.js')
 
 const MID_1 = '368250'
 const MID_2 = '362380'
@@ -64,7 +64,6 @@ const REF_2 = 'AM2-EMF8G-22222222'
 beforeEach(() => {
   for (const [k, v] of Object.entries({ ...M1, ...M2 })) process.env[k] = v
   process.env['AIRPAY_ENV'] = 'live'
-  delete process.env['AIRPAY_ACTIVE_MERCHANT']
   delete process.env['KKCHAT_CALLBACK_URL']
   orders.map.clear()
   settleRowCalls.list = []
@@ -230,11 +229,13 @@ describe('9/15. verification uses the credentials of the ORDER’s merchant', ()
     expect(seen[0]?.mid).toBe(MID_2)
   })
 
-  it('9. flipping the ACTIVE merchant does not change how a pending order settles', async () => {
-    // The exact hazard: the switch is flipped to 2 while an AM- order is still
-    // pending. That order must still be asked of merchant 1.
-    process.env['AIRPAY_ACTIVE_MERCHANT'] = '2'
+  it('13. what a LATER shopper selects cannot change a pending order', async () => {
+    // The exact hazard: an AM- order is still pending while the next shopper
+    // picks merchant 2. Nothing about that selection reaches this order — its
+    // merchant comes from its own reference, which never changes.
     seedOrder(REF_1)
+    expect(parseMerchantSelection(2)).toBe(2)
+
     const seen: AirpayConfig[] = []
     await settleOrder({ orderRef: REF_1 }, undefined, async (_ref, config) => {
       seen.push(config)
@@ -242,8 +243,7 @@ describe('9/15. verification uses the credentials of the ORDER’s merchant', ()
     })
     expect(seen[0]?.mid).toBe(MID_1)
 
-    // And the reverse: an AM2- order still asks merchant 2 after a flip back.
-    delete process.env['AIRPAY_ACTIVE_MERCHANT']
+    // And the reverse: an AM2- order still asks merchant 2.
     seedOrder(REF_2)
     seen.length = 0
     await settleOrder({ orderRef: REF_2 }, undefined, async (_ref, config) => {
@@ -251,6 +251,39 @@ describe('9/15. verification uses the credentials of the ORDER’s merchant', ()
       return null
     })
     expect(seen[0]?.mid).toBe(MID_2)
+  })
+
+  it('13. changing the ENVIRONMENT after creation cannot move an order', async () => {
+    // Credentials are re-read at settlement time, so a redeploy that alters the
+    // variables must still reach the same merchant. Only the _2 SET can serve
+    // an AM2- order: point merchant 2's variables at a different account and
+    // the AM2- order follows its own reference to whatever `_2` now holds —
+    // never to merchant 1's credentials, and never the other way round.
+    seedOrder(REF_1)
+    seedOrder(REF_2)
+
+    process.env['AIRPAY_MID_2'] = '999999'
+    // A dead switch cannot resurrect itself either.
+    process.env['AIRPAY_ACTIVE_MERCHANT'] = '1'
+
+    const seen: AirpayConfig[] = []
+    for (const ref of [REF_1, REF_2]) {
+      await settleOrder({ orderRef: ref }, undefined, async (_ref, config) => {
+        seen.push(config)
+        return null
+      })
+    }
+
+    // The AM- order is untouched by any change to the _2 set...
+    expect(seen[0]?.merchant).toBe(1)
+    expect(seen[0]?.mid).toBe(MID_1)
+    // ...and the AM2- order is still routed to the SECOND credential set,
+    // never quietly re-homed onto merchant 1.
+    expect(seen[1]?.merchant).toBe(2)
+    expect(seen[1]?.mid).not.toBe(MID_1)
+
+    delete process.env['AIRPAY_ACTIVE_MERCHANT']
+    process.env['AIRPAY_MID_2'] = MID_2
   })
 
   it('15. settlement for BOTH merchants still requires Order Confirmation', async () => {

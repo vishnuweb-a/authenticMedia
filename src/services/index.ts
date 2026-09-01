@@ -28,6 +28,7 @@ export {
 } from './payment'
 export type {
   AirpayHandoff,
+  AirpayMerchantChoice,
   CreateAirpayPaymentInput,
   CreatePaymentInput,
   OrderPaymentState,

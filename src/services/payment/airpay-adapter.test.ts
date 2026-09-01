@@ -63,6 +63,7 @@ describe('the contact the shopper typed reaches the request body', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
+      merchant: 1,
       contact: { email: 'customer@example.com', phone: '' },
     })
 
@@ -76,6 +77,7 @@ describe('the contact the shopper typed reaches the request body', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
+      merchant: 1,
       contact: { email: '', phone: '9876543210' },
     })
 
@@ -87,6 +89,7 @@ describe('the contact the shopper typed reaches the request body', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
+      merchant: 1,
       contact: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' },
     })
 
@@ -100,6 +103,7 @@ describe('the contact the shopper typed reaches the request body', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
+      merchant: 1,
       contact: { email: 'customer@example.com', phone: '' },
     })
 
@@ -119,6 +123,7 @@ describe('pricing stays server-authoritative', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
+      merchant: 1,
       contact: { email: 'customer@example.com' },
     })
 
@@ -126,8 +131,15 @@ describe('pricing stays server-authoritative', () => {
     for (const forbidden of ['amount', 'price', 'total', 'subtotal']) {
       expect(body).not.toHaveProperty(forbidden)
     }
-    // Only these three keys cross the boundary.
-    expect(Object.keys(body).sort()).toEqual(['contact', 'guestToken', 'serviceSlugs'])
+    // Only these four keys cross the boundary. `merchant` is an INDEX the
+    // server validates against an allowlist — never a MID, a credential or a
+    // configuration, none of which exists in the browser to send.
+    expect(Object.keys(body).sort()).toEqual([
+      'contact',
+      'guestToken',
+      'merchant',
+      'serviceSlugs',
+    ])
   })
 
   it('holds no Airpay credential or signing material', async () => {
@@ -135,11 +147,80 @@ describe('pricing stays server-authoritative', () => {
 
     await createAirpayPayment({
       serviceSlugs: ['airpay-integration-test'],
+      merchant: 1,
       contact: { email: 'customer@example.com' },
     })
 
     const serialised = JSON.stringify(sent[0]?.body).toLowerCase()
     for (const forbidden of ['secret', 'password', 'checksum', 'encdata', 'mid', 'client_id']) {
+      expect(serialised).not.toContain(forbidden)
+    }
+  })
+})
+
+describe('the shopper choice of merchant reaches the request body', () => {
+  it('sends merchant 1 as a bare index and nothing more', async () => {
+    const { sent } = captureFetch()
+
+    await createAirpayPayment({
+      serviceSlugs: ['airpay-integration-test'],
+      merchant: 1,
+      contact: { email: 'customer@example.com' },
+    })
+
+    expect(sent[0]?.body['merchant']).toBe(1)
+  })
+
+  it('sends merchant 2 when that option was chosen', async () => {
+    const { sent } = captureFetch()
+
+    await createAirpayPayment({
+      serviceSlugs: ['airpay-integration-test'],
+      merchant: 2,
+      contact: { email: 'customer@example.com' },
+    })
+
+    expect(sent[0]?.body['merchant']).toBe(2)
+  })
+
+  it('sends exactly ONE request for one call — never one per merchant', async () => {
+    const { sent } = captureFetch()
+
+    await createAirpayPayment({
+      serviceSlugs: ['airpay-integration-test'],
+      merchant: 2,
+      contact: { email: 'customer@example.com' },
+    })
+
+    // Two requests would mean two order rows and two hosted pages for a single
+    // checkout action — the shortest path to a shopper paying twice.
+    expect(sent).toHaveLength(1)
+  })
+
+  it('20. carries no MID, credential or gateway configuration', async () => {
+    const { sent } = captureFetch()
+
+    await createAirpayPayment({
+      serviceSlugs: ['airpay-integration-test'],
+      merchant: 2,
+      contact: { email: 'customer@example.com' },
+    })
+
+    const serialised = JSON.stringify(sent[0]?.body)
+    // The real MIDs, and anything shaped like a credential or an override.
+    for (const forbidden of [
+      '368250',
+      '362380',
+      'AIRPAY_',
+      'username',
+      'password',
+      'secret',
+      'client_id',
+      'clientId',
+      'apiKey',
+      'verifyUrl',
+      'callbackUrl',
+    ]) {
       expect(serialised).not.toContain(forbidden)
     }
   })

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef } from 'react'
 import { useCart } from '@/stores'
 import { CartEmptyState } from './cart-empty-state'
 import { CheckoutContactFields } from './checkout-contact-fields'
+import { CheckoutMerchantChoice } from './checkout-merchant-choice'
 import { CartLineItem } from './cart-line-item'
 import { CartSummary } from './cart-summary'
 import { CheckoutAwaitingPanel } from './checkout-awaiting-panel'
@@ -24,8 +25,18 @@ import { useDialogBehavior } from '@/hooks'
  */
 export function CartDrawer() {
   const { items, total, itemCount, isOpen, removeItem, closeCart } = useCart()
-  const { status, error, contact, contactErrors, setContactValue, pay, reset, awaiting } =
-    useCheckout()
+  const {
+    status,
+    error,
+    contact,
+    contactErrors,
+    setContactValue,
+    merchant,
+    setMerchant,
+    pay,
+    reset,
+    awaiting,
+  } = useCheckout()
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
@@ -97,6 +108,16 @@ export function CartDrawer() {
                   <CartLineItem key={item.serviceId} item={item} onRemove={removeItem} />
                 ))}
               </ul>
+
+              {/* Exactly one of the two Airpay merchants takes this payment,
+                  and the shopper chooses which (§2.4). The choice travels to
+                  the server as an index; no MID or credential is in the
+                  browser to choose from. */}
+              <CheckoutMerchantChoice
+                value={merchant}
+                disabled={status === 'pending'}
+                onChange={setMerchant}
+              />
 
               {/* Airpay refuses a payment with neither an email nor a phone
                   number, so one is collected before the handoff (§7.3). */}

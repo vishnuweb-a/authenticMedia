@@ -26,8 +26,8 @@ export interface AirpayHandoff {
   /**
    * Whether Airpay will bring this browser back to THIS site (§8.1, §14.3).
    *
-   * Stated by the server from the merchant it chose; the client never sends it
-   * and cannot choose it. Airpay resolves its Response URL per MID from its own
+   * Stated by the SERVER from the merchant it validated and loaded; a value
+   * sent by a client is ignored. Airpay resolves its Response URL per MID from its own
    * dashboard, so for merchant 2 — whose dashboard points at KKChat, as the
    * client requires — the answer is no, and this tab must not be navigated away
    * or the shopper never comes back.
@@ -54,8 +54,21 @@ export interface OrderStatusResult {
 
 const UNAVAILABLE = 'Payments are unavailable right now. Please try again shortly.'
 
+/**
+ * Which Airpay payment option the shopper chose at checkout.
+ *
+ * An INDEX into two server-held credential sets — never a MID, a credential or
+ * any part of a merchant configuration, none of which exists in the browser at
+ * all. The server validates it against an exhaustive 1|2 allowlist and does the
+ * mapping itself, so this value selects BETWEEN two merchants the server
+ * defines and can neither describe nor reach inside either one.
+ */
+export type AirpayMerchantChoice = 1 | 2
+
 export interface CreateAirpayPaymentInput {
   readonly serviceSlugs: readonly string[]
+  /** Required. The server refuses the request rather than guessing one. */
+  readonly merchant: AirpayMerchantChoice
   readonly contact: {
     readonly firstName?: string
     readonly lastName?: string
@@ -80,6 +93,8 @@ export async function createAirpayPayment(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         serviceSlugs: input.serviceSlugs,
+        // The shopper's choice of payment option, as an index only (§2.4).
+        merchant: input.merchant,
         // public.orders requires exactly one owner; this flow is guest
         // checkout. The token identifies a session for "my orders" reads —
         // it is never authorization to settle.

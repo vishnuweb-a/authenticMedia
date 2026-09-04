@@ -5,7 +5,6 @@ import { logEvent } from './log.js'
 import { forwardCallback } from './relay.js'
 import { settleOrder, type SettleOutcome } from './settle.js'
 import { findOrderByRef } from './db.js'
-import { merchantForOrderRef } from './order-ref.js'
 
 /**
  * The Airpay callback pipeline (AIPAY-DOCS §8, §13.7).
@@ -23,6 +22,17 @@ import { merchantForOrderRef } from './order-ref.js'
  * paid. There is no callback-specific settlement, verification or database
  * write anywhere in this file.
  */
+
+/**
+ * The merchants whose callbacks this receiver accepts (§2.4).
+ *
+ * Both MIDs register the SAME URL in their own Airpay dashboards, so both
+ * arrive here. This is the accepted SET, not a merchant assignment: each
+ * delivery is still matched to exactly one of these by its stated MID (checked
+ * against the server's own environment) or, absent that, by which credential
+ * set actually opens its envelope. A MID outside this set is rejected.
+ */
+const ACCEPTED_MERCHANTS: readonly MerchantId[] = [1, 2]
 
 /**
  * §14.2 — PUBLIC_SITE_ORIGIN is authoritative. x-forwarded-host is used only
@@ -100,16 +110,23 @@ export async function handleAirpayCallback(
 
   const browser = isBrowserLeg(req)
 
-  // Which merchant's receiver this is — stated by the ROUTE (§2.4). Merchant 2
-  // does not have a receiver in this application at all: its Airpay dashboard
-  // delivers straight to KKChat, so nothing should ever reach this pipeline
-  // claiming to be merchant 2, and the merchant check below rejects it if it
-  // does.
-  const merchant: MerchantId = options.merchant ?? 1
+  // Which merchant(s) this receiver accepts — stated by the ROUTE (§2.4), never
+  // taken as an instruction from the payload. BOTH Airpay merchants now
+  // register this same URL in their own dashboards, so one receiver serves
+  // both: MID 368250 as it always has, and MID 362380 which previously
+  // delivered straight to KKChat.
+  //
+  // A caller may still pin a single merchant via `options.merchant`. The
+  // parser matches the stated MID against the server's OWN environment to pick
+  // which accepted credential set applies, and rejects a MID belonging to
+  // neither — so widening the set never weakens the check, it only makes the
+  // second legitimate merchant recognisable instead of rejected.
+  const accepted: readonly MerchantId[] =
+    options.merchant !== undefined ? [options.merchant] : ACCEPTED_MERCHANTS
 
-  // 1. PARSE. The parser checks the stated merchant against THIS ROUTE's own
-  //    MID before it opens anything.
-  const parsed = await parseCallback(req, merchant)
+  // 1. PARSE. The parser checks the stated merchant against the accepted MIDs
+  //    before it opens anything.
+  const parsed = await parseCallback(req, accepted)
 
   if (!parsed.ok || !parsed.fields) {
     // Diagnostics are NAMES and CATEGORIES only, never values (§9.8). Each
@@ -181,22 +198,32 @@ export async function handleAirpayCallback(
   //    envelope would not open returned long before this line, and one that is
   //    settled, unsettled, duplicate or unknown reaches it identically.
   //
-  //    ⚠ Merchant 2 is NEVER relayed from here (§2.4, §13.8). Airpay posts its
-  //    callbacks for that merchant DIRECTLY to KKChat, so a relay of ours would
-  //    be a SECOND delivery of a callback KKChat already has — not a missing
-  //    one. This adds no forwarding and changes no destination: merchant 1's
-  //    single KKChat URL is untouched, and merchant 2 simply is not forwarded.
-  //    The guard is on the ORDER REFERENCE rather than on the route, so it
-  //    holds even if a merchant-2 callback somehow reaches this receiver.
-  const relayMerchant = merchantForOrderRef(fields.orderRef)
-
-  if (options.relay && relayMerchant === 1 && Object.keys(parsed.relayFields).length > 0) {
+  //    ⚠ BOTH merchants are relayed, to the SAME confirmed destination
+  //    (§13.2). MID 362380 now registers THIS URL in its own Airpay dashboard
+  //    rather than posting to KKChat directly, so this application is the sole
+  //    receiver for both merchants and a forward here is the ONLY delivery
+  //    KKChat gets — not a duplicate. Suppressing it, as this pipeline did
+  //    while merchant 2 delivered directly, would now silently drop every
+  //    merchant-2 callback.
+  //
+  //    ⚠ The guard is deliberately NOT on the order reference. Forwarding
+  //    eligibility is decided ENTIRELY by the parse above, which accepted this
+  //    delivery for one of the two configured merchants after checking the
+  //    stated MID against the server's own environment and, where an envelope
+  //    was present, actually opening it. An external payment made on either MID
+  //    by another portal carries a reference in that portal's own format — not
+  //    AM-/AM2- — and belongs to KKChat exactly as much as one of ours does.
+  //    Deciding relay on the reference PREFIX would drop precisely those,
+  //    which is the whole point of this receiver.
+  //
+  //    The settlement outcome is likewise not consulted: settled, unsettled,
+  //    duplicate, legacy and unknown_order all reach this line identically.
+  if (options.relay && Object.keys(parsed.relayFields).length > 0) {
     await forwardCallback(parsed.relayFields)
-  } else if (options.relay && relayMerchant !== 1) {
+  } else if (options.relay) {
     logEvent('payment.callback.forward.skipped', {
       orderRef: fields.orderRef,
-      merchant: relayMerchant,
-      reason: 'direct_to_kkchat',
+      reason: 'no_relay_fields',
     })
   }
 

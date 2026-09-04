@@ -29,19 +29,20 @@ import { logEvent } from './log.js'
 export const KKCHAT_DEFAULT_URL = 'https://kkchat.in/callback/cpm/arp_frontiva/collection'
 
 /**
- * Merchant 2's callback URL (§2.4, §13.8) — RECORDED HERE, NEVER POSTED TO.
+ * A DIFFERENT KKChat integration's URL — RECORDED HERE, NEVER POSTED TO.
  *
- * MID 362380 registers this URL in its OWN Airpay dashboard, so Airpay
- * delivers to KKChat directly and this application is not in that path at all.
- * Nothing in this repository configures it and nothing here changes it; it is
+ * ⚠ This is NOT merchant 2's destination. MID 362380 now delivers its
+ * callbacks to this application, which forwards them to KKCHAT_DEFAULT_URL
+ * (`arp_frontiva`) exactly like merchant 1 — one confirmed destination for
+ * both merchants.
+ *
+ * The string is kept, and still never posted to, because §13.2's trap is
+ * permanent: KKChat answers 200 to ANY middle segment and SILENTLY DISCARDS
+ * what it does not recognise. Every relay once sent to `…/cpm/arp/collection`
+ * was answered 200, logged as a success, and never reached the merchant. It is
  * exported so the regression tests can assert the exact string and, more
- * importantly, assert that forwardCallback is NEVER called with it.
- *
- * ⚠ Note the middle segment differs from merchant 1's: `arp`, not
- * `arp_frontiva`. §13.2 warns that KKChat answers 200 to ANY middle segment
- * and silently discards what it does not recognise — which is precisely why
- * neither of these two strings may ever be "normalised" into the other. They
- * are different integrations that happen to share a host.
+ * importantly, assert that forwardCallback is never called with it — so the
+ * two are never "normalised" into each other.
  */
 export const KKCHAT_MERCHANT_2_URL = 'https://kkchat.in/callback/cpm/arp/collection'
 

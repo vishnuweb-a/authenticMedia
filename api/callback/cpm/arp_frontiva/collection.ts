@@ -29,17 +29,22 @@ import type { ApiRequest, ApiResponse } from '../../../_lib/http.js'
  * Airpay's Order Confirmation.
  */
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
-  // ⚠ This route is MERCHANT 1's receiver and nothing else (§2.4). The merchant
-  // is stated by the route, not read from the payload, because the decryption
-  // key is derived from that merchant's credentials and the order reference is
-  // sealed inside the envelope — so the key is never chosen from the bytes
-  // being authenticated.
+  // ⚠ This route is the receiver for BOTH merchants (§2.4). MID 368250 has
+  // always delivered here; MID 362380 now registers this same URL in its own
+  // Airpay dashboard instead of posting to KKChat directly, so this
+  // application is the sole receiver for both and forwards both onward.
   //
-  // Merchant 2 (MID 362380) has NO receiver in this application: Airpay posts
-  // its callbacks straight to the URL configured in that merchant's own
-  // dashboard. A delivery for that merchant arriving here is rejected by the
-  // merchant check before its envelope is ever opened, and is never relayed —
-  // so KKChat -> AuthenticMedia -> KKChat cannot be constructed (§13.8).
+  // The ACCEPTED SET is stated by the route; the individual merchant is never
+  // taken as an instruction from the payload. A delivery is matched to one
+  // accepted credential set by its stated MID — compared against the server's
+  // own environment — and, when an envelope is present, only a key that
+  // actually OPENS it is accepted. So the decryption key is still never chosen
+  // from the unauthenticated bytes. A MID belonging to neither merchant is
+  // rejected before anything is opened, and is never relayed.
+  //
+  // Forwarding does NOT depend on a local order existing: an external payment
+  // taken on either MID by another portal is parsed, settles to unknown_order
+  // with no database write, and is forwarded to KKChat regardless.
   //
   // Deliberately no method gate. Airpay posts here, and the browser leg may
   // arrive as a GET; answering 405 to either is the failure this route exists

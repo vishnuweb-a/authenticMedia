@@ -230,20 +230,31 @@ function readMid(merchant: MerchantId): string | null {
 export async function parseCallback(
   req: ApiRequest,
   /**
-   * Which merchant's receiver this is (§2.4).
+   * Which merchant(s) this receiver accepts (§2.4).
    *
-   * ⚠ Fixed by the ROUTE, never inferred from the payload. Each Airpay
-   * merchant registers its own callback URL in its own dashboard, so the URL
-   * a delivery arrived at is what states the merchant — and it is the one
-   * piece of that statement a forger cannot alter by editing a field.
+   * ⚠ Fixed by the ROUTE, never taken as an instruction from the payload.
+   * The route states the SET of merchants whose callbacks are legitimate at
+   * this URL; a delivery may then only ever narrow that set, never widen it.
    *
-   * The merchant must be known BEFORE decryption, because the key is derived
-   * from that merchant's credentials and the order reference is sealed inside
-   * the envelope. Taking it from the body instead would mean choosing a
-   * decryption key from the very bytes being authenticated.
+   * Both MIDs now register this same URL in their own Airpay dashboards, so
+   * one receiver serves both. The stated MID is matched against the server's
+   * OWN environment values to pick which of the accepted credential sets to
+   * check against — that is a lookup among server-held configurations, not a
+   * credential the client names. A MID matching neither is rejected outright,
+   * exactly as before.
+   *
+   * The merchant must be resolved BEFORE decryption, because the key is
+   * derived from that merchant's credentials and the order reference is
+   * sealed inside the envelope. When no MID is stated and an envelope is
+   * present, the candidates are tried in order and only a key that actually
+   * OPENS the envelope is accepted — the ciphertext itself decides, so the
+   * key is still never chosen from an unauthenticated assertion.
    */
-  merchant: MerchantId = 1,
+  accepted: MerchantId | readonly MerchantId[] = 1,
 ): Promise<CallbackParse> {
+  const candidates: readonly MerchantId[] = Array.isArray(accepted)
+    ? accepted
+    : [accepted as MerchantId]
   await hydrateBody(req)
 
   const contentType = header(req, 'content-type') ?? ''
@@ -295,10 +306,32 @@ export async function parseCallback(
   const statedMerchant = lookup(outer, FIELD_ALIASES.merchantId)
   let merchantCheck: MerchantCheck = 'absent'
 
+  // The merchant(s) still in play after the stated MID has been considered.
+  // When a MID is stated it NARROWS the accepted set to the single candidate
+  // whose server-held MID it equals; when none is stated every accepted
+  // candidate remains in play and the envelope decides between them.
+  let inPlay: readonly MerchantId[] = candidates
+
   if (statedMerchant) {
-    const expected = readMid(merchant)
-    merchantCheck =
-      expected === null ? 'unavailable' : statedMerchant === expected ? 'match' : 'mismatch'
+    // Read each accepted merchant's OWN MID from the server environment and
+    // find which one this delivery claims. `null` means that credential set is
+    // not configured on this deployment.
+    const mids = candidates.map((c) => ({ merchant: c, mid: readMid(c) }))
+    const matched = mids.find((m) => m.mid !== null && m.mid === statedMerchant)
+
+    if (matched) {
+      merchantCheck = 'match'
+      inPlay = [matched.merchant]
+    } else if (mids.every((m) => m.mid === null)) {
+      // No credential set is configured at all — cannot judge. Fails closed a
+      // step later regardless: no environment means no verification and no
+      // database (edge case 44).
+      merchantCheck = 'unavailable'
+    } else {
+      // A MID belonging to NEITHER accepted merchant. Rejected outright, and
+      // never opened — unchanged from the single-merchant behaviour.
+      merchantCheck = 'mismatch'
+    }
   }
 
   if (merchantCheck === 'mismatch') {
@@ -319,13 +352,19 @@ export async function parseCallback(
   let effective: Record<string, unknown> = outer
 
   if (sealed) {
-    const config = (() => {
-      try {
-        return loadAirpayConfig(merchant)
-      } catch {
-        return null
-      }
-    })()
+    // Try each merchant still in play. Only a key that ACTUALLY OPENS the
+    // envelope is accepted, so the ciphertext — not an unauthenticated field —
+    // decides which credentials were right. A candidate whose environment is
+    // incomplete simply cannot open anything and is skipped.
+    const configs = inPlay
+      .map((m) => {
+        try {
+          return loadAirpayConfig(m)
+        } catch {
+          return null
+        }
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null)
 
     // §9.4 ⚠ PROVEN — the base64 half contains `+`, and `+` is how
     // x-www-form-urlencoded spells a SPACE. Node's base64 decoder skips
@@ -335,10 +374,13 @@ export async function parseCallback(
     // The repair runs ONLY after an attempt on the bytes exactly as received
     // has failed. This repairs the transport; it does not guess at the
     // cryptography.
-    const plaintext = config
-      ? (decrypt(sealed, config) ??
-        (sealed.includes(' ') ? decrypt(sealed.replace(/ /g, '+'), config) : null))
-      : null
+    let plaintext: string | null = null
+    for (const config of configs) {
+      plaintext =
+        decrypt(sealed, config) ??
+        (sealed.includes(' ') ? decrypt(sealed.replace(/ /g, '+'), config) : null)
+      if (plaintext !== null) break
+    }
 
     if (plaintext === null) {
       // ⚠ An unreadable envelope ENDS the read — it does not fall back to the

@@ -404,16 +404,17 @@ describe('10/11/12/13. callback routing and the relay', () => {
     vi.unstubAllGlobals()
   })
 
-  it('10. a callback stating the OTHER merchant is rejected before decryption', async () => {
+  it('10. a callback stating a MID belonging to NEITHER merchant is rejected before decryption', async () => {
     stubRelay()
     seedOrder(REF_2)
 
-    // Sealed with merchant 2's key and stating merchant 2's MID, delivered to
-    // merchant 1's receiver.
+    // Sealed with a real key, but stating a MID this deployment does not hold.
+    // The receiver now accepts TWO merchants; a third is still rejected, and
+    // the envelope is never opened.
     const sealed = encrypt(JSON.stringify({ TRANSACTIONID: REF_2 }), loadAirpayConfig(2))
 
     const { res, captured } = makeRes()
-    await handleAirpayCallback(makeReq({ merchant_id: MID_2, encdata: sealed }), res, {
+    await handleAirpayCallback(makeReq({ merchant_id: '999999', encdata: sealed }), res, {
       relay: true,
     })
 
@@ -425,37 +426,60 @@ describe('10/11/12/13. callback routing and the relay', () => {
     vi.unstubAllGlobals()
   })
 
-  it('12/13. a merchant-2 order is NEVER relayed onward — no loop is constructible', async () => {
+  it('10b. a callback stating MID 362380 is now ACCEPTED and opened with the _2 key', async () => {
     stubRelay()
     seedOrder(REF_2)
 
-    // The hostile shape: a merchant-2 ORDER reference inside an envelope that
-    // merchant 1's receiver can actually open. Even here the relay must not
-    // fire, or KKChat -> AuthenticMedia -> KKChat becomes possible.
-    const sealed = encrypt(
-      JSON.stringify({ TRANSACTIONID: REF_2, TRANSACTIONSTATUS: '200' }),
-      loadAirpayConfig(1),
-    )
+    // Sealed with merchant 2's own key and stating merchant 2's MID. Both MIDs
+    // register this same receiver now, so this must parse — and must be opened
+    // by merchant 2's credentials, never merchant 1's.
+    const sealed = encrypt(JSON.stringify({ TRANSACTIONID: REF_2 }), loadAirpayConfig(2))
 
     const { res, captured } = makeRes()
-    await handleAirpayCallback(makeReq({ merchant_id: MID_1, encdata: sealed }), res, {
+    await handleAirpayCallback(makeReq({ merchant_id: MID_2, encdata: sealed }), res, {
       relay: true,
     })
 
     expect(captured.code).toBe(200)
-    // The guard is on the ORDER REFERENCE, so it holds regardless of how the
-    // delivery got here. Nothing was sent to KKChat at all — so no second
-    // delivery, and no loop.
-    expect(relayCalls()).toEqual([])
-    // Specifically never to merchant 2's own URL, which Airpay already posts
-    // to directly.
+    expect(captured.body).not.toEqual({ received: true, outcome: 'unparseable' })
+    // Parsed, and forwarded to the ONE confirmed destination.
+    expect(relayCalls()).toHaveLength(1)
+    expect(relayCalls()[0]?.url).toBe(KKCHAT_DEFAULT_URL)
+    vi.unstubAllGlobals()
+  })
+
+  it('12/13. a merchant-2 order IS relayed onward, to the arp_frontiva destination', async () => {
+    stubRelay()
+    seedOrder(REF_2)
+
+    // MID 362380 now delivers HERE rather than straight to KKChat, so this
+    // application is the sole receiver and its forward is the ONLY delivery
+    // KKChat gets. Suppressing it would silently drop the callback.
+    const sealed = encrypt(
+      JSON.stringify({ TRANSACTIONID: REF_2, TRANSACTIONSTATUS: '200' }),
+      loadAirpayConfig(2),
+    )
+
+    const { res, captured } = makeRes()
+    await handleAirpayCallback(makeReq({ merchant_id: MID_2, encdata: sealed }), res, {
+      relay: true,
+    })
+
+    expect(captured.code).toBe(200)
+    expect(relayCalls()).toHaveLength(1)
+    // ONE confirmed destination for both merchants (§13.2).
+    expect(relayCalls()[0]?.url).toBe(KKCHAT_DEFAULT_URL)
+    expect(relayCalls()[0]?.url).toContain('arp_frontiva')
+    // Still never the other integration's segment — the two are never
+    // normalised into each other.
     expect(fetches.list.map((c) => c.url)).not.toContain(KKCHAT_MERCHANT_2_URL)
     vi.unstubAllGlobals()
   })
 
-  it('13. nothing in the codebase ever POSTs to merchant 2’s KKChat URL', () => {
-    // Airpay delivers there directly. A relay of ours would be a DUPLICATE
-    // delivery, and pointing our relay at it is how a loop would start.
+  it('13. nothing in the codebase ever POSTs to the OTHER integration’s KKChat URL', () => {
+    // Both merchants forward to arp_frontiva. The `arp` segment belongs to a
+    // different integration and must never be posted to: KKChat answers 200 to
+    // any segment and silently discards what it does not recognise (§13.2).
     expect(KKCHAT_MERCHANT_2_URL).toBe('https://kkchat.in/callback/cpm/arp/collection')
     expect(KKCHAT_DEFAULT_URL).toBe('https://kkchat.in/callback/cpm/arp_frontiva/collection')
     // The two must never be normalised into each other (§13.2).
@@ -481,9 +505,13 @@ describe('10/11/12/13. callback routing and the relay', () => {
       expect(captured.code).toBe(200)
     }
 
-    // A terminal order short-circuits: no write, no relay, on any delivery.
+    // A terminal order short-circuits SETTLEMENT: no second write, ever.
     expect(settleRowCalls.list).toEqual([])
-    expect(relayCalls()).toEqual([])
+    // Forwarding is decided by the PARSE, not the settlement outcome, so each
+    // delivery still relays. Idempotency is a database property here, not a
+    // reason to drop a callback KKChat is waiting for.
+    expect(relayCalls()).toHaveLength(3)
+    for (const call of relayCalls()) expect(call.url).toBe(KKCHAT_DEFAULT_URL)
     vi.unstubAllGlobals()
   })
 
@@ -609,5 +637,142 @@ describe('an unknown Airpay status is merchant-agnostic (§11.4)', () => {
       }))
       expect(result.outcome, `MID 1 status ${status}`).toBe(outcome)
     }
+  })
+})
+
+/**
+ * EXTERNAL (non-portal) callbacks — the acceptance condition for this receiver.
+ *
+ * The same Airpay MIDs are used by other portals. Their callbacks arrive here
+ * and belong to KKChat regardless of what our database contains, so forwarding
+ * eligibility is decided ENTIRELY by the parse: local order existence is not a
+ * requirement, and an external reference is not in AM-/AM2- format at all.
+ *
+ * Everything here runs against mocks. No live MID is contacted, no payment is
+ * created, and no order row is ever written.
+ */
+describe('external callbacks forward without a local order', () => {
+  const EXTERNAL_REF = '4029283746152'
+
+  function relayCalls(): Array<{ url: string; init: RequestInit }> {
+    return fetches.list.filter((call) => call.url.includes('kkchat.in'))
+  }
+
+  function stubRelay(): void {
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      fetches.list.push({ url: String(url), init })
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        text: async () => 'success',
+      } as unknown as Response
+    })
+  }
+
+  for (const { mid, merchant, label } of [
+    { mid: MID_1, merchant: 1 as const, label: 'MID 368250' },
+    { mid: MID_2, merchant: 2 as const, label: 'MID 362380' },
+  ]) {
+    it(`2/4. a valid ${label} callback for an UNKNOWN external order still forwards`, async () => {
+      stubRelay()
+      // Deliberately NO seedOrder: this payment was taken by another portal.
+      const sealed = encrypt(
+        JSON.stringify({ TRANSACTIONID: EXTERNAL_REF, TRANSACTIONSTATUS: '200' }),
+        loadAirpayConfig(merchant),
+      )
+
+      const { res, captured } = makeRes()
+      await handleAirpayCallback(makeReq({ merchant_id: mid, encdata: sealed }), res, {
+        relay: true,
+      })
+
+      expect(captured.code).toBe(200)
+      expect(captured.body).toEqual({ received: true, outcome: 'unknown_order' })
+
+      // 13. No local order is created or updated. Not one write.
+      expect(settleRowCalls.list).toEqual([])
+      expect(orders.map.has(EXTERNAL_REF)).toBe(false)
+
+      // 15. Forwarded, to exactly the confirmed destination.
+      expect(relayCalls()).toHaveLength(1)
+      expect(relayCalls()[0]?.url).toBe('https://kkchat.in/callback/cpm/arp_frontiva/collection')
+      vi.unstubAllGlobals()
+    })
+
+    it(`11/12. a valid envelope-LESS ${label} callback with a numeric reference forwards`, async () => {
+      stubRelay()
+      const { res, captured } = makeRes()
+      await handleAirpayCallback(
+        makeReq({
+          merchant_id: mid,
+          TRANSACTIONID: EXTERNAL_REF,
+          TRANSACTIONSTATUS: '200',
+        }),
+        res,
+        { relay: true },
+      )
+
+      expect(captured.code).toBe(200)
+      expect(settleRowCalls.list).toEqual([])
+      // A numeric/foreign reference is not rejected for its shape.
+      expect(relayCalls()).toHaveLength(1)
+      expect(relayCalls()[0]?.url).toBe(KKCHAT_DEFAULT_URL)
+      vi.unstubAllGlobals()
+    })
+  }
+
+  it('8. an unrecognised merchant_id is rejected and NOT forwarded', async () => {
+    stubRelay()
+    const { res, captured } = makeRes()
+    await handleAirpayCallback(
+      makeReq({ merchant_id: '111111', TRANSACTIONID: EXTERNAL_REF }),
+      res,
+      { relay: true },
+    )
+
+    expect(captured.body).toEqual({ received: true, outcome: 'unparseable' })
+    expect(relayCalls()).toEqual([])
+    expect(settleRowCalls.list).toEqual([])
+    vi.unstubAllGlobals()
+  })
+
+  it('9. an unreadable envelope is rejected and NOT forwarded', async () => {
+    stubRelay()
+    const { res, captured } = makeRes()
+    await handleAirpayCallback(
+      makeReq({ merchant_id: MID_2, encdata: 'not-a-real-envelope-but-long-enough-to-try' }),
+      res,
+      { relay: true },
+    )
+
+    expect(captured.body).toEqual({ received: true, outcome: 'unparseable' })
+    // A rejected read relays NOTHING — the fallback to outer fields that would
+    // let a forger pair a captured envelope with their own plaintext.
+    expect(relayCalls()).toEqual([])
+    vi.unstubAllGlobals()
+  })
+
+  it('10. an empty callback is unparseable and NOT forwarded', async () => {
+    stubRelay()
+    const { res, captured } = makeRes()
+    await handleAirpayCallback(makeReq({}), res, { relay: true })
+
+    expect(captured.body).toEqual({ received: true, outcome: 'unparseable' })
+    expect(relayCalls()).toEqual([])
+    vi.unstubAllGlobals()
+  })
+
+  it('6/7. merchant 1 credentials never open a merchant 2 envelope, and vice versa', () => {
+    const m1 = loadAirpayConfig(1)
+    const m2 = loadAirpayConfig(2)
+    const sealedBy2 = encrypt(JSON.stringify({ TRANSACTIONID: EXTERNAL_REF }), m2)
+    const sealedBy1 = encrypt(JSON.stringify({ TRANSACTIONID: EXTERNAL_REF }), m1)
+
+    expect(decrypt(sealedBy2, m1)).toBeNull()
+    expect(decrypt(sealedBy1, m2)).toBeNull()
+    // Each opens its own.
+    expect(decrypt(sealedBy2, m2)).toContain(EXTERNAL_REF)
+    expect(decrypt(sealedBy1, m1)).toContain(EXTERNAL_REF)
   })
 })

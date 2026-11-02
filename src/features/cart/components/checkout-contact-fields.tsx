@@ -29,8 +29,8 @@ export function CheckoutContactFields({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-[13px] text-text-subtle">
-        Airpay needs an email address or a phone number to send your payment
-        receipt. One is enough.
+        Airpay needs an email address or a phone number to process your payment,
+        and we use it to contact you about your order. One is enough.
       </p>
 
       <Input

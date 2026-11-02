@@ -3,6 +3,7 @@ import { AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { formatInr } from '@/lib/format'
 import { AirpayMark } from './airpay-mark'
+import { CheckoutPolicyConsent } from './checkout-policy-consent'
 import type { CheckoutStatus } from '../types/cart.types'
 
 export interface CartSummaryProps {
@@ -10,6 +11,9 @@ export interface CartSummaryProps {
   status: CheckoutStatus
   error: string | null
   onPay: () => void
+  termsAccepted: boolean
+  termsError: string | null
+  onTermsChange: (accepted: boolean) => void
 }
 
 /**
@@ -20,7 +24,15 @@ export interface CartSummaryProps {
  * so none is added (SCREEN-MAP.md → Cart). The amount is always derived from
  * cart state; nothing here is hardcoded.
  */
-export function CartSummary({ total, status, error, onPay }: CartSummaryProps) {
+export function CartSummary({
+  total,
+  status,
+  error,
+  onPay,
+  termsAccepted,
+  termsError,
+  onTermsChange,
+}: CartSummaryProps) {
   const payLabel = status === 'failed' ? 'Try Again' : 'Pay Now'
 
   return (
@@ -42,6 +54,13 @@ export function CartSummary({ total, status, error, onPay }: CartSummaryProps) {
           </p>
         )}
       </div>
+
+      <CheckoutPolicyConsent
+        checked={termsAccepted}
+        error={termsError}
+        disabled={status === 'pending'}
+        onChange={onTermsChange}
+      />
 
       <div className="mt-[22px] flex h-[71px] items-center justify-between gap-4 rounded-2xl border border-border-drawer bg-surface-drawer-panel px-5">
         <AirpayMark />

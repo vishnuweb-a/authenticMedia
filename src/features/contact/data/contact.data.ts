@@ -70,9 +70,9 @@ export const CONTACT_CHANNELS: readonly ContactChannel[] = [
 
 /** [VERIFIED] — the bordered notice below the rows. */
 export const CONTACT_RESPONSE_NOTICE = {
-  before: 'We typically respond within ',
-  emphasis: '24 hours',
-  after: ' on business days.',
+  before: 'For the quickest reply, ',
+  emphasis: 'email or call us directly',
+  after: ' using the details above.',
 } as const
 
 /**
@@ -88,8 +88,8 @@ export const CONTACT_FORM_CONTENT = {
   description:
     'Share a few details and the right person on our team will get back to you.',
   submitLabel: 'Send Message',
-  successTitle: 'Message received',
+  successTitle: 'Please contact us directly',
   successBody:
-    "Thanks for reaching out — we'll reply to the address you gave us within one business day.",
+    "This form is not yet connected to our inbox, so your message has not reached us. Please email contact@authenticmedia.fun or call us directly.",
   successAction: 'Send another message',
 } as const

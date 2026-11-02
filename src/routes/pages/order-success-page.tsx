@@ -29,7 +29,7 @@ export function OrderSuccessPage() {
       <Outcome
         icon={<SearchX aria-hidden="true" className="size-10 text-text-muted" />}
         title="We could not find that order"
-        body="The link is missing its order reference. Check the link from your confirmation email, or contact us with your order number."
+        body="The link is missing its order reference. Check the link you were given, or contact us with your order number."
       />
     )
   }
@@ -53,7 +53,7 @@ export function OrderSuccessPage() {
         <Outcome
           icon={<CheckCircle2 aria-hidden="true" className="size-10 text-emerald-400" />}
           title="Payment confirmed"
-          body={`We have received ${amount > 0 ? formatInr(amount) : 'your payment'}. We will be in touch shortly to get started.`}
+          body={`We have received ${amount > 0 ? formatInr(amount) : 'your payment'}. Our team will contact you using the details you gave at checkout to get started.`}
           reference={orderRef}
         />
       )
@@ -63,7 +63,7 @@ export function OrderSuccessPage() {
         <Outcome
           icon={<AlertCircle aria-hidden="true" className="size-10 text-red-400" />}
           title="That payment did not go through"
-          body="No money has been taken. You can try again from your cart, or contact us if you think this is a mistake."
+          body="We could not confirm this payment. If your account was debited, your bank normally reverses it automatically; please check your statement and contact us with your order reference if the amount is not returned. You can also try again from your cart. See our Refund & Cancellation Policy for details."
           reference={orderRef}
         />
       )

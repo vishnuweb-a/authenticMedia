@@ -1,0 +1,6 @@
+export { LegalPageLayout } from './components/legal-page-layout'
+export { POLICY_META } from './content/policy-meta'
+export { TERMS } from './content/terms'
+export { PRIVACY } from './content/privacy'
+export { REFUND } from './content/refund'
+export { SERVICE_DELIVERY } from './content/service-delivery'

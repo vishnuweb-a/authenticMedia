@@ -33,6 +33,9 @@ export function CartDrawer() {
     setContactValue,
     merchant,
     setMerchant,
+    termsAccepted,
+    setTermsAccepted,
+    termsError,
     pay,
     reset,
     awaiting,
@@ -135,7 +138,15 @@ export function CartDrawer() {
             button while a payment is already open in another window is how a
             shopper ends up paying twice. */}
         {itemCount > 0 && !awaiting && (
-          <CartSummary total={total} status={status} error={error} onPay={pay} />
+          <CartSummary
+            total={total}
+            status={status}
+            error={error}
+            onPay={pay}
+            termsAccepted={termsAccepted}
+            termsError={termsError}
+            onTermsChange={setTermsAccepted}
+          />
         )}
       </div>
     </div>

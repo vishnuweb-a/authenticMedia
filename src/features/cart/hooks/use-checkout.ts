@@ -33,6 +33,10 @@ export interface UseCheckoutResult {
    */
   merchant: AirpayMerchantChoice
   setMerchant: (merchant: AirpayMerchantChoice) => void
+  /** Terms acceptance. Unticked by default; payment cannot start without it. */
+  termsAccepted: boolean
+  setTermsAccepted: (accepted: boolean) => void
+  termsError: string | null
   pay: () => Promise<void>
   reset: () => void
   /**
@@ -95,6 +99,8 @@ export function useCheckout(): UseCheckoutResult {
   // Merchant 1 is preselected: it is the production-proven account, so the
   // shopper who changes nothing gets the flow that has always worked.
   const [merchant, setMerchant] = useState<AirpayMerchantChoice>(1)
+  const [termsAccepted, setTermsAcceptedState] = useState(false)
+  const [termsError, setTermsError] = useState<string | null>(null)
   const [awaiting, setAwaiting] = useState<UseCheckoutResult['awaiting']>(null)
 
   const reset = useCallback(() => {
@@ -104,6 +110,13 @@ export function useCheckout(): UseCheckoutResult {
     setHasAttempted(false)
     setAwaiting(null)
     setMerchant(1)
+    setTermsAcceptedState(false)
+    setTermsError(null)
+  }, [])
+
+  const setTermsAccepted = useCallback((accepted: boolean) => {
+    setTermsAcceptedState(accepted)
+    if (accepted) setTermsError(null)
   }, [])
 
   const setContactValue = useCallback(
@@ -131,7 +144,11 @@ export function useCheckout(): UseCheckoutResult {
 
     const errors = validateCheckoutContact(contact)
     setContactErrors(errors)
-    if (Object.keys(errors).length > 0) {
+    const mustAccept = !termsAccepted
+    setTermsError(
+      mustAccept ? 'Please accept the Terms & Conditions to continue to payment.' : null,
+    )
+    if (Object.keys(errors).length > 0 || mustAccept) {
       setStatus('idle')
       setError(null)
       return
@@ -198,7 +215,7 @@ export function useCheckout(): UseCheckoutResult {
     // path, on the same trigger the success page has always used.
     submitToAirpay(handoff, document, PAYMENT_WINDOW_NAME)
     setAwaiting({ orderRef: handoff.orderRef, accessToken: handoff.accessToken })
-  }, [contact, items, merchant, status])
+  }, [contact, items, merchant, status, termsAccepted])
 
   return {
     status,
@@ -208,6 +225,9 @@ export function useCheckout(): UseCheckoutResult {
     setContactValue,
     merchant,
     setMerchant,
+    termsAccepted,
+    setTermsAccepted,
+    termsError,
     pay,
     reset,
     awaiting,

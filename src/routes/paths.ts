@@ -12,6 +12,7 @@ export const ROUTES = {
   terms: '/terms',
   privacy: '/privacy',
   refund: '/refund',
+  serviceDelivery: '/service-delivery-policy',
   orderSuccess: '/order-success',
 } as const
 
@@ -39,4 +40,5 @@ export const FOOTER_LINKS: readonly NavLinkItem[] = [
   { label: 'Terms & Conditions', to: ROUTES.terms },
   { label: 'Privacy Policy', to: ROUTES.privacy },
   { label: 'Refund & Cancellation', to: ROUTES.refund },
+  { label: 'Service Delivery Policy', to: ROUTES.serviceDelivery },
 ]

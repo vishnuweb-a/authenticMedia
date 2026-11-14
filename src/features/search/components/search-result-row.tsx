@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { ServiceIcon, isServiceIconName } from '@/components/shared'
 import { useAddToCart } from '@/features/services'
 import { formatInr } from '@/lib/format'
-import { ROUTES } from '@/routes/paths'
+import { servicePath } from '@/routes/paths'
 import type { SearchResult } from '../types/search.types'
 
 const MATCH_LABELS: Record<SearchResult['matchedOn'], string> = {
@@ -23,7 +23,7 @@ interface SearchResultRowProps {
 /**
  * One search hit: icon tile, title, price, and a direct add-to-cart control.
  *
- * The row itself navigates to the service on the Services page; the add button
+ * The row itself navigates to the service's detail page; the add button
  * is a separate control inside it, so it is deliberately **not** a nested
  * button — the row is a `<button>` and the add action sits beside it in the
  * flex row rather than within it (nested interactive elements are invalid and
@@ -36,8 +36,7 @@ export function SearchResultRow({ result, onNavigate }: SearchResultRowProps) {
 
   function openService() {
     onNavigate()
-    // The catalogue lives on one page; the anchor scrolls to the card itself.
-    navigate(`${ROUTES.services}#service-${service.id}`)
+    navigate(servicePath(service.id))
   }
 
   return (

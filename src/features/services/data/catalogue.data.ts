@@ -226,13 +226,3 @@ export const MICRO_SERVICES: readonly Service[] = [
 /** Every catalogue entry in page order: core offerings, then micro-services. */
 export const ALL_SERVICES: readonly Service[] = [...CORE_SERVICES, ...MICRO_SERVICES]
 
-/**
- * Total catalogue size, stated by Home's "Explore all 18 services" link.
- *
- * The transcribed entries come to 17 (12 core + 5 micro). The 18th sits below
- * the 16384px capture ceiling on both Home and Services, so rather than invent
- * a service to pad the list, the stated total stays the advertised figure and
- * the catalogue holds only what the captures actually show
- * (REFERENCE-LIMITATIONS.md → Screenshot Truncation).
- */
-export const CATALOGUE_SIZE = 18

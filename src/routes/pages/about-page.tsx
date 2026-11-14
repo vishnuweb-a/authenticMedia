@@ -4,7 +4,12 @@ import {
   ApproachSection,
   CapabilitiesSection,
   ClosingCtaSection,
+  CompanyInfoSection,
+  ContactOfficeSection,
+  OperationsSection,
 } from '@/features/about'
+import { useDocumentMeta } from '@/features/legal'
+import { ROUTES } from '@/routes/paths'
 
 /**
  * About — who Authentic Media is.
@@ -16,12 +21,22 @@ import {
  * global one from AppShell.
  */
 export function AboutPage() {
+  useDocumentMeta(
+    'About Us — Authentic Media',
+    'Who Authentic Media and IT Sector Private Limited is, what it does, how its fixed-price IT and digital services work, and how to reach it.',
+    ROUTES.about,
+  )
+
+  // Who we are → what we do → how services work → operations → company → contact.
   return (
     <>
       <AboutHero />
       <AboutNarrative />
       <CapabilitiesSection />
       <ApproachSection />
+      <OperationsSection />
+      <CompanyInfoSection />
+      <ContactOfficeSection />
       <ClosingCtaSection />
     </>
   )

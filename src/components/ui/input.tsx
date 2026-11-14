@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn'
 const FIELD_CLASSES =
   'w-full rounded-input border border-border bg-surface px-4 py-3 text-base text-text ' +
   'placeholder:text-text-subtle transition-colors ' +
-  'focus-visible:border-primary-mid aria-invalid:border-red-400/70'
+  'focus-visible:border-primary-mid aria-invalid:border-red-500'
 
 interface FieldShellProps {
   id: string
@@ -34,7 +34,7 @@ function FieldShell({ id, label, error, hint, children }: FieldShellProps) {
         </p>
       )}
       {error && (
-        <p id={errorId} className="text-sm text-red-300">
+        <p id={errorId} className="text-sm text-red-700">
           {error}
         </p>
       )}

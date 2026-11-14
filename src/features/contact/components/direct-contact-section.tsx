@@ -1,4 +1,7 @@
+import { Link } from 'react-router-dom'
+
 import { Section } from '@/components/layout'
+import { ROUTES } from '@/routes/paths'
 import { GradientText, SectionEyebrow } from '@/components/ui'
 import { SERVICE_ICONS } from '@/components/shared'
 import { ContactChannelRow } from './contact-channel-row'
@@ -48,13 +51,32 @@ export function DirectContactSection() {
           ))}
         </ul>
 
-        <p className="mt-[38px] flex max-w-[382px] items-start gap-2 rounded-card border border-[#321C6A] bg-[#19123F] px-[18px] py-[21px] text-[15px] leading-[1.6] text-text-lavender sm:max-w-[560px]">
+        <p className="mt-[38px] flex max-w-[382px] items-start gap-2 rounded-card border border-border-strong bg-surface-badge px-[18px] py-[21px] text-[15px] leading-[1.6] text-text-lavender sm:max-w-[560px]">
           <ClockIcon aria-hidden="true" className="mt-[5px] size-4 shrink-0" />
           <span>
             {CONTACT_RESPONSE_NOTICE.before}
             <strong className="font-bold text-text">{CONTACT_RESPONSE_NOTICE.emphasis}</strong>
             {CONTACT_RESPONSE_NOTICE.after}
           </span>
+        </p>
+
+        {/* Visible complaint path (audit report §4.2 — Grievance Officer). */}
+        <p className="mt-6 max-w-[382px] text-[15px] leading-[1.6] text-text-muted sm:max-w-[560px]">
+          Have a complaint about an order, payment or service? Follow our{' '}
+          <Link
+            to={ROUTES.grievance}
+            className="rounded-sm font-semibold text-text-lavender underline underline-offset-2 hover:text-text"
+          >
+            Grievance Redressal
+          </Link>{' '}
+          procedure, or check the{' '}
+          <Link
+            to={ROUTES.faq}
+            className="rounded-sm font-semibold text-text-lavender underline underline-offset-2 hover:text-text"
+          >
+            FAQs
+          </Link>
+          .
         </p>
       </div>
     </Section>

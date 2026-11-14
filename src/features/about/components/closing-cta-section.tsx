@@ -23,11 +23,11 @@ export function ClosingCtaSection() {
   const { closing } = ABOUT_CONTENT
 
   return (
-    <section className="relative isolate overflow-hidden bg-[linear-gradient(90deg,#1C0D43_0%,#1D0C37_100%)]">
+    <section className="relative isolate overflow-hidden bg-surface-subtle">
       {/* The measured 60px grid. Decorative texture only. */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-[length:60px_60px] bg-[linear-gradient(to_right,rgba(255,255,255,0.022)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.022)_1px,transparent_1px)]"
+        className="pointer-events-none absolute inset-0 -z-10 bg-[length:60px_60px] bg-[linear-gradient(to_right,rgba(15,23,42,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.05)_1px,transparent_1px)]"
       />
 
       <Container className="flex flex-col items-center gap-6 py-[74px] text-center md:py-24">
@@ -43,7 +43,7 @@ export function ClosingCtaSection() {
         <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row">
           <Link
             to={closing.primaryCta.to}
-            className="bg-gradient-primary shadow-glow-primary inline-flex h-[62px] items-center justify-center rounded-pill px-11 text-base font-bold text-text transition-[filter,transform] duration-150 hover:brightness-108 active:scale-[0.98]"
+            className="bg-gradient-primary shadow-glow-primary inline-flex h-[62px] items-center justify-center rounded-pill px-11 text-base font-bold text-on-primary transition-[filter,transform] duration-150 hover:brightness-108 active:scale-[0.98]"
           >
             {closing.primaryCta.label}
           </Link>

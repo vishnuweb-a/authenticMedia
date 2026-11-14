@@ -9,47 +9,54 @@
  * against the reference document directly.
  */
 @theme {
-  /* Backgrounds — one continuous radial glow, not four flat bands */
-  --color-background: #07071b;
-  --color-background-elevated: #0d0a22;
-  --color-background-glow: #110b2c;
-  --color-header: #190e39;
+  /*
+   * Light theme (audit report §4.7: "clean light-mode theme suitable for an IT
+   * and technology company"). Token NAMES are unchanged from the original dark
+   * system so no component had to be rewritten; only the values moved.
+   * Contrast (WCAG 2.1, on #ffffff): text 17.9:1, muted 7.6:1, subtle 5.9:1,
+   * primary-mid 6.7:1, white on primary-end 5.2:1.
+   */
+
+  /* Backgrounds */
+  --color-background: #f8fafc;
+  --color-background-elevated: #ffffff;
+  --color-background-glow: #eef2ff;
+  --color-header: #ffffff;
 
   /* Surfaces */
-  --color-surface: #160e35;
-  --color-surface-subtle: #151532;
-  /* Cart drawer surfaces. [MEASURED] on cart(screenshot).png — the drawer is
-     deliberately cooler/greyer than the violet page cards (#160e35), and its
-     three surfaces step apart by only a few points of luminance. */
-  --color-surface-drawer: #1a1a24;
-  --color-surface-drawer-item: #21212b;
-  --color-surface-drawer-footer: #16161f;
-  --color-surface-drawer-panel: #1d1d26;
-  --color-surface-drawer-tile: #2b243f;
-  --color-border-drawer: rgba(255, 255, 255, 0.07);
-  --color-surface-cta-muted: #2a1759;
-  --color-surface-badge: #180f39;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f1f5f9;
+  /* Cart drawer surfaces */
+  --color-surface-drawer: #ffffff;
+  --color-surface-drawer-item: #f8fafc;
+  --color-surface-drawer-footer: #f1f5f9;
+  --color-surface-drawer-panel: #eff6ff;
+  --color-surface-drawer-tile: #dbeafe;
+  --color-border-drawer: rgba(15, 23, 42, 0.1);
+  --color-surface-cta-muted: #eff6ff;
+  --color-surface-badge: #eff6ff;
 
-  /* Primary gradient stops. The ramp holds violet through the first half and
-     bends sharply to pink in the last third — a 2-stop gradient loses the bend. */
-  --color-primary-start: #8640ef;
-  --color-primary-mid: #a754f7;
-  --color-primary-end: #d04dbf;
-  --color-primary-tail: #e24dae;
+  /* Primary gradient: navy into a restrained technology blue. */
+  --color-primary-start: #1e3a8a;
+  --color-primary-mid: #1d4ed8;
+  --color-primary-end: #2563eb;
+  --color-primary-tail: #2563eb;
 
   /* Text */
-  --color-text: #ffffff;
-  --color-text-muted: #a9a7c0;
-  --color-text-subtle: #7c7a96;
-  --color-text-violet: #c9b6f5;
-  /* Eyebrow pill / notice-card copy. [MEASURED] on the WHAT WE OFFER badge
-     (home.png) and both Contact eyebrows — the label is lavender, not white. */
-  --color-text-lavender: #c4b5fd;
+  --color-text: #0f172a;
+  --color-text-muted: #475569;
+  /* #64748b fell to 4.34:1 on the tinted drawer/footer surfaces; this clears
+     4.5:1 on every surface below, down to the #dbeafe tile (4.8:1). */
+  --color-text-subtle: #596579;
+  --color-text-violet: #1e40af;
+  --color-text-lavender: #1e3a8a;
+  /* Foreground on gradient / primary fills. */
+  --color-on-primary: #ffffff;
 
   /* Borders */
-  --color-border: rgba(134, 64, 239, 0.18);
-  --color-border-strong: #361b6f;
-  --color-border-secondary: rgba(134, 64, 239, 0.45);
+  --color-border: #e2e8f0;
+  --color-border-strong: #bfdbfe;
+  --color-border-secondary: #94a3b8;
 
   /* Radii */
   --radius-pill: 9999px;
@@ -91,14 +98,12 @@
 
   --gradient-hero: radial-gradient(
     120% 80% at 50% 0%,
-    var(--color-header) 0%,
-    var(--color-background-glow) 35%,
-    var(--color-background-elevated) 60%,
-    var(--color-background) 100%
+    var(--color-background-glow) 0%,
+    var(--color-background) 70%
   );
 
-  --glow-primary: 0 8px 28px rgba(134, 64, 239, 0.35);
-  --glow-card-hover: 0 8px 32px rgba(134, 64, 239, 0.18);
+  --glow-primary: 0 6px 16px rgba(29, 78, 216, 0.22);
+  --glow-card-hover: 0 8px 24px rgba(15, 23, 42, 0.08);
 
   /* Layout rhythm. The reference gutter is 24px at mobile; wider viewports are
      inferred and handled by the Container component. */
@@ -109,7 +114,7 @@
 
   --header-height: 66px;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 @layer base {
@@ -146,7 +151,7 @@
 
   ::selection {
     background: var(--color-primary-start);
-    color: var(--color-text);
+    color: var(--color-on-primary);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -179,7 +184,7 @@
     background-image: var(--gradient-primary-long);
   }
 
-  /* Hero backdrop: the violet radial light source behind the header. */
+  /* Hero backdrop: a soft blue radial wash behind the header. */
   .bg-hero-glow {
     background-image: var(--gradient-hero);
   }

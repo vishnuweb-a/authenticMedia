@@ -3,17 +3,11 @@ import { Card, GradientText } from '@/components/ui'
 import { ABOUT_APPROACH_STEPS, ABOUT_CONTENT } from '../data/about.data'
 
 /**
- * "How We Work". **[RECONSTRUCTED — no reference exists for this region]**
+ * "How It Works" — the order-to-delivery workflow. Rendered on About and on
+ * Services, so both pages describe the engagement identically.
  *
- * The second half of the blank-band reconstruction. The four steps are the
- * clauses of one *verified* sentence in the narrative — "understand the
- * client's challenges, design smart systems, and deliver solutions that are
- * efficient, secure, and easy to manage" — split in the order it states them,
- * so no process claim is added that the page does not already make.
- *
- * Uses the shared Card with a gradient step index. The index is decorative
- * ordering, so the list order carries the meaning for assistive tech rather
- * than the numeral being read as part of each heading.
+ * The index is decorative ordering, so the list order carries the meaning for
+ * assistive tech rather than the numeral being read as part of each heading.
  */
 export function ApproachSection() {
   const { approach } = ABOUT_CONTENT

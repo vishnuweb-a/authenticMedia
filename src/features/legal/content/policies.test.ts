@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { ROUTES } from '@/routes/paths'
+import { GRIEVANCE } from './grievance'
 import { PRIVACY } from './privacy'
 import { REFUND } from './refund'
 import { SERVICE_DELIVERY } from './service-delivery'
 import { TERMS } from './terms'
 
-const DOCS = [TERMS, PRIVACY, REFUND, SERVICE_DELIVERY]
+const DOCS = [TERMS, PRIVACY, REFUND, SERVICE_DELIVERY, GRIEVANCE]
 const KNOWN = new Set<string>(Object.values(ROUTES))
 
 function texts(doc: (typeof DOCS)[number]): string[] {

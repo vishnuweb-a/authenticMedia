@@ -1,5 +1,4 @@
 import { ROUTES } from '@/routes/paths'
-import { CATALOGUE_SIZE } from '@/features/services/data/catalogue.data'
 import type { HomeContent } from '../types/home.types'
 
 /**
@@ -11,19 +10,15 @@ import type { HomeContent } from '../types/home.types'
  */
 export const HOME_CONTENT: HomeContent = {
   hero: {
-    eyebrow: 'NOIDA, INDIA — EST. 2020',
+    // "EST. 2020" removed: no incorporation evidence in the repo (audit §4.7).
+    eyebrow: 'NOIDA, INDIA',
     headline: 'We build the digital backbone of your',
     // Gradient + italic — the only italic in the system.
     headlineAccent: 'business.',
     description:
-      'From SEO audits to AI automation, Authentic Media delivers IT solutions that actually move the needle — not just reports that sit in a drawer.',
+      'From SEO and security audits to maintenance and AI automation, Authentic Media delivers fixed-price IT and digital services for businesses — ordered online and delivered remotely by our team.',
     primaryCta: { label: 'See Our Services', to: ROUTES.services },
     secondaryCta: { label: 'Talk to Us', to: ROUTES.contact },
-    socialProof: {
-      avatars: [{ initials: 'PS' }, { initials: 'RK' }, { initials: 'AM' }, { initials: 'VT' }],
-      highlight: '500+ clients',
-      rest: 'trust Authentic Media',
-    },
   },
 
   coreServices: {
@@ -43,7 +38,8 @@ export const HOME_CONTENT: HomeContent = {
   },
 
   catalogueLink: {
-    label: `Explore all ${CATALOGUE_SIZE} services`,
+    // No count: the live catalogue is in Supabase and its size changes (production has 17, not 18).
+    label: 'View all services',
     to: ROUTES.services,
   },
 }

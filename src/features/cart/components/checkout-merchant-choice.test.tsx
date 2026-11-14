@@ -64,6 +64,12 @@ describe('23. the checkout renders exactly two merchant options', () => {
     expect(markup.match(/Pay with airpay/g)).toHaveLength(2)
   })
 
+  it('gives the two options distinct accessible names', () => {
+    const markup = render()
+    expect(markup).toContain('Pay with airpay — Option 1')
+    expect(markup).toContain('Pay with airpay — Option 2')
+  })
+
   it('uses a real fieldset and legend, so the group is announced as a group', () => {
     const markup = render()
     expect(markup).toContain('<fieldset')

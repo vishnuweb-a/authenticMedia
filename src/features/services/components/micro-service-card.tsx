@@ -1,8 +1,11 @@
 import { Check } from 'lucide-react'
 
+import { Link } from 'react-router-dom'
+
 import { Button, Card } from '@/components/ui'
 import { ServiceIcon, isServiceIconName } from '@/components/shared'
 import { formatInr } from '@/lib/format'
+import { servicePath } from '@/routes/paths'
 import { useAddToCart } from '../hooks/use-add-to-cart'
 import type { ServiceCardProps } from '../types/services.types'
 
@@ -21,11 +24,18 @@ export function MicroServiceCard({ service }: ServiceCardProps) {
       id={`service-${service.id}`}
       interactive
       // scroll-mt clears the sticky header when search deep-links to this card.
-      className="flex h-full scroll-mt-24 flex-col"
+      className="flex h-full w-full scroll-mt-24 flex-col"
     >
       {isServiceIconName(service.icon) && <ServiceIcon name={service.icon} tile />}
 
-      <h3 className="mt-6 text-[19px]">{service.title}</h3>
+      <h3 className="mt-6 text-[19px]">
+        <Link
+          to={servicePath(service.id)}
+          className="rounded-sm transition-colors hover:text-primary-mid"
+        >
+          {service.title}
+        </Link>
+      </h3>
 
       {service.subtitle && (
         <p className="mt-2 text-[15px] font-medium text-primary-mid">{service.subtitle}</p>
@@ -41,6 +51,14 @@ export function MicroServiceCard({ service }: ServiceCardProps) {
           ))}
         </ul>
       )}
+
+      <Link
+        to={servicePath(service.id)}
+        aria-label={`View details: ${service.title}`}
+        className="mt-5 self-start inline-flex rounded-sm text-[14px] font-semibold text-primary-mid hover:text-primary-end"
+      >
+        View details
+      </Link>
 
       <div className="mt-auto pt-7">
         <Button

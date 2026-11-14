@@ -86,7 +86,7 @@ export const SERVICE_DELIVERY: PolicyDocument = {
       id: 'support',
       title: 'Support and Escalation',
       blocks: [
-        `If you have a question or a problem with a delivered Service, email ${MAIL} with your order reference. If the response does not resolve it, follow the escalation steps in the [Refund & Cancellation Policy](/refund).`,
+        `If you have a question or a problem with a delivered Service, email ${MAIL} with your order reference. If the response does not resolve it, follow the escalation steps on our [Grievance Redressal](/grievance-redressal) page.`,
       ],
     },
     {

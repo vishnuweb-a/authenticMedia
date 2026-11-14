@@ -14,7 +14,7 @@ import { HOME_CONTENT } from '../data/home.data'
  *
  * Measured geometry (CSS px, capture ÷ 3): eyebrow baseline ~250, H1 lines at
  * 296/329/362 (~33px line-height), body from 421, primary CTA 537–599 (62px
- * tall, 219px wide), social proof ~722.
+ * tall, 219px wide).
  */
 export function Hero() {
   const { hero } = HOME_CONTENT
@@ -30,7 +30,7 @@ export function Hero() {
           {hero.eyebrow}
         </p>
 
-        <h1 className="mt-8 max-w-[19ch] text-[40px] leading-[0.82] sm:text-5xl lg:text-[64px]">
+        <h1 className="mt-8 max-w-[19ch] text-[40px] leading-[1.08] sm:text-5xl lg:text-[64px]">
           {hero.headline}{' '}
           <GradientText className="italic">{hero.headlineAccent}</GradientText>
         </h1>
@@ -44,7 +44,7 @@ export function Hero() {
         <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
           <Link
             to={hero.primaryCta.to}
-            className="bg-gradient-primary shadow-glow-primary inline-flex h-[62px] items-center justify-center rounded-pill px-9 text-base font-bold text-text transition-[filter,transform] duration-150 hover:brightness-108 active:scale-[0.98]"
+            className="bg-gradient-primary shadow-glow-primary inline-flex h-[62px] items-center justify-center rounded-pill px-9 text-base font-bold text-on-primary transition-[filter,transform] duration-150 hover:brightness-108 active:scale-[0.98]"
           >
             {hero.primaryCta.label}
           </Link>
@@ -57,33 +57,7 @@ export function Hero() {
           </Link>
         </div>
 
-        <SocialProof />
       </Container>
     </section>
-  )
-}
-
-function SocialProof() {
-  const { avatars, highlight, rest } = HOME_CONTENT.hero.socialProof
-
-  return (
-    <div className="mt-14 flex items-center gap-4">
-      {/* Decorative: the sentence beside it carries the meaning. */}
-      <ul aria-hidden="true" className="flex items-center">
-        {avatars.map((avatar, index) => (
-          <li
-            key={avatar.initials}
-            className="bg-gradient-primary flex size-9 items-center justify-center rounded-pill text-[11px] font-bold text-text ring-2 ring-background"
-            style={{ marginLeft: index === 0 ? 0 : '-10px' }}
-          >
-            {avatar.initials}
-          </li>
-        ))}
-      </ul>
-
-      <p className="text-[15px] text-text-muted">
-        <span className="font-bold text-text">{highlight}</span> {rest}
-      </p>
-    </div>
   )
 }

@@ -65,7 +65,7 @@ export function CheckoutPolicyConsent({
         <p
           id={errorId}
           role="alert"
-          className="mt-2 flex items-start gap-2 pl-7 text-[13px] text-red-400"
+          className="mt-2 flex items-start gap-2 pl-7 text-[13px] text-red-700"
         >
           <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           {error}

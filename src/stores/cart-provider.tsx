@@ -38,8 +38,8 @@ function cartReducer(state: readonly CartItem[], action: CartAction): readonly C
  * because the network did.
  *
  * Prices held here are for display only. The order total is re-resolved from
- * the catalogue server-side at checkout, so a stale local price cannot affect
- * what is charged.
+ * the catalogue server-side at checkout, and checkout refuses to hand off to
+ * the gateway if that amount differs from the total shown here.
  */
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, dispatch] = useReducer(cartReducer, [] as readonly CartItem[])
@@ -106,6 +106,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     void reconcile(() => cartService.clear())
   }, [reconcile])
 
+  const refresh = useCallback(() => {
+    void reconcile(() => cartService.getCart())
+  }, [reconcile])
+
   const openCart = useCallback(() => setIsOpen(true), [])
   const closeCart = useCallback(() => setIsOpen(false), [])
 
@@ -120,11 +124,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       addItem,
       removeItem,
       clear,
+      refresh,
       hasItem: (serviceId: string) => items.some((item) => item.serviceId === serviceId),
       openCart,
       closeCart,
     }
-  }, [items, isOpen, isLoading, error, addItem, removeItem, clear, openCart, closeCart])
+  }, [items, isOpen, isLoading, error, addItem, removeItem, clear, refresh, openCart, closeCart])
 
   return <CartContext value={value}>{children}</CartContext>
 }

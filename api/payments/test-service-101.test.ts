@@ -130,8 +130,10 @@ describe('3. the service is visible through the normal catalogue query', () => {
     for (const file of [
       'src/features/services/components/service-card.tsx',
       'src/features/services/components/micro-service-card.tsx',
-      'src/features/services/components/catalogue-micro-services-section.tsx',
-      'src/features/services/components/core-offerings-section.tsx',
+      'src/features/services/components/services-browser.tsx',
+      'src/features/services/lib/browse-services.ts',
+      'src/features/services/hooks/use-service.ts',
+      'src/routes/pages/service-detail-page.tsx',
       'src/features/services/hooks/use-catalogue.ts',
       'src/features/services/hooks/use-add-to-cart.ts',
     ]) {

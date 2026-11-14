@@ -1,4 +1,4 @@
-/** The location line above the hero heading, e.g. "NOIDA, INDIA — EST. 2020". */
+/** The location line above the hero heading, e.g. "NOIDA, INDIA". */
 export interface HeroEyebrow {
   text: string
 }
@@ -7,22 +7,6 @@ export interface HeroEyebrow {
 export interface HeroCta {
   label: string
   to: string
-}
-
-/**
- * The overlapping avatar chips beside the client count. Initials only — the
- * reference shows no photography here.
- */
-export interface AvatarChip {
-  initials: string
-}
-
-export interface HeroSocialProof {
-  avatars: readonly AvatarChip[]
-  /** Bold white fragment, e.g. "500+ clients". */
-  highlight: string
-  /** Muted remainder, e.g. "trust Authentic Media". */
-  rest: string
 }
 
 export interface HeroContent {
@@ -34,7 +18,6 @@ export interface HeroContent {
   description: string
   primaryCta: HeroCta
   secondaryCta: HeroCta
-  socialProof: HeroSocialProof
 }
 
 /** Eyebrow + split heading + sub-copy for a Home section. */

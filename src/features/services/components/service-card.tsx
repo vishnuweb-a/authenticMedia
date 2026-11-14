@@ -1,6 +1,9 @@
+import { Link } from 'react-router-dom'
+
 import { Button, Card } from '@/components/ui'
 import { ServiceIcon, isServiceIconName } from '@/components/shared'
 import { formatInr } from '@/lib/format'
+import { servicePath } from '@/routes/paths'
 import { useAddToCart } from '../hooks/use-add-to-cart'
 import type { ServiceCardProps } from '../types/services.types'
 
@@ -28,16 +31,31 @@ export function ServiceCard({ service }: ServiceCardProps) {
       {service.badge && (
         // Measured at ~76×24px CSS, inset ~17px from the card's top-right on the
         // Branding & Content card — the only badged entry in the capture.
-        <p className="bg-gradient-primary absolute top-5 right-5 rounded-pill px-3 py-1 text-[11px] leading-none font-bold tracking-[0.08em] text-text uppercase">
+        <p className="bg-gradient-primary absolute top-5 right-5 rounded-pill px-3 py-1 text-[11px] leading-none font-bold tracking-[0.08em] text-on-primary uppercase">
           {service.badge}
         </p>
       )}
 
       {isServiceIconName(service.icon) && <ServiceIcon name={service.icon} className="size-9" />}
 
-      <h3 className="mt-6 text-[21px]">{service.title}</h3>
+      <h3 className="mt-6 text-[21px]">
+        <Link
+          to={servicePath(service.id)}
+          className="rounded-sm transition-colors hover:text-primary-mid"
+        >
+          {service.title}
+        </Link>
+      </h3>
 
       <p className="mt-4 text-[15px] text-text-muted">{service.description}</p>
+
+      <Link
+        to={servicePath(service.id)}
+        aria-label={`View details: ${service.title}`}
+        className="mt-4 self-start inline-flex rounded-sm text-[14px] font-semibold text-primary-mid hover:text-primary-end"
+      >
+        View details
+      </Link>
 
       {/* mt-auto keeps the pill on the card floor so a row of cards aligns. */}
       <div className="mt-auto pt-7">

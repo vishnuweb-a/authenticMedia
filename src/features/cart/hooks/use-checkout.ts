@@ -9,6 +9,7 @@ import {
 import type { AirpayMerchantChoice } from '@/services'
 import { useCart } from '@/stores'
 import type { CheckoutStatus } from '../types/cart.types'
+import { chargedAmountMismatch } from '../lib/charged-amount'
 import {
   EMPTY_CONTACT,
   normalisePhone,
@@ -90,7 +91,7 @@ export interface UseCheckoutResult {
  * payment failed.
  */
 export function useCheckout(): UseCheckoutResult {
-  const { items } = useCart()
+  const { items, total, refresh } = useCart()
   const [status, setStatus] = useState<CheckoutStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [contact, setContact] = useState<CheckoutContactValues>(EMPTY_CONTACT)
@@ -188,6 +189,19 @@ export function useCheckout(): UseCheckoutResult {
 
     const handoff = created.data
 
+    // ⚠ Never send the shopper to pay an amount they were not shown. The order
+    // row already exists as pending_payment; it is left unpaid exactly like an
+    // abandoned checkout, and the cart is re-read so the shopper sees what the
+    // server will actually charge.
+    const mismatch = chargedAmountMismatch(total, handoff.amount)
+    if (mismatch) {
+      paymentWindow?.close()
+      setError(mismatch)
+      setStatus('failed')
+      refresh()
+      return
+    }
+
     // The full-tab hand-off — merchant 1, exactly as before. Airpay returns
     // this browser to /order-success itself, so no window is needed.
     // Navigation ends this hook's involvement; status stays 'pending' so the
@@ -215,7 +229,7 @@ export function useCheckout(): UseCheckoutResult {
     // path, on the same trigger the success page has always used.
     submitToAirpay(handoff, document, PAYMENT_WINDOW_NAME)
     setAwaiting({ orderRef: handoff.orderRef, accessToken: handoff.accessToken })
-  }, [contact, items, merchant, status, termsAccepted])
+  }, [contact, items, total, refresh, merchant, status, termsAccepted])
 
   return {
     status,

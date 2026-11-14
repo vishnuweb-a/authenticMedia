@@ -1,7 +1,7 @@
 import { Mail, MapPin, Phone } from 'lucide-react'
 
 import { Section } from '@/components/layout'
-import { SITE } from '@/lib/site'
+import { LEGAL, SITE } from '@/lib/site'
 import { POLICY_META } from '../content/policy-meta'
 import { useDocumentMeta } from '../hooks/use-document-meta'
 import type { PolicyDocument } from '../types'
@@ -12,6 +12,8 @@ function CompanyContactDetails() {
   return (
     <address className="space-y-2 rounded-card border border-border bg-surface p-5 text-[15px] text-text-muted not-italic">
       <p className="font-bold text-text">{SITE.legalName}</p>
+      {LEGAL.cin && <p>CIN: {LEGAL.cin}</p>}
+      {LEGAL.gstin && <p>GSTIN: {LEGAL.gstin}</p>}
       <p className="flex gap-2">
         <MapPin aria-hidden="true" className="mt-1 size-4 shrink-0 text-primary-mid" />
         {SITE.address.single}

@@ -82,7 +82,7 @@ export const TERMS: PolicyDocument = {
       id: 'ordering',
       title: 'Service Ordering',
       blocks: [
-        'To order, you add one or more Services to your cart, enter your contact details (an email address or phone number is required; a name is optional), choose the available payment option, accept these Terms and start the payment. We create an Order record when you start a payment.',
+        'To order, you add one or more Services to your cart, enter your contact details (an email address or phone number is required; a name is optional), choose one of the payment options shown at checkout, accept these Terms and start the payment. We create an Order record when you start a payment.',
         'An Order is complete from the point of sale only once your Payment has been confirmed by us (see section 9). Our acceptance of the Order, and the manual start of work, follow payment confirmation. We may decline or cancel an Order, for example where a Service cannot be provided as described, in which case we will refund any amount you paid for it as set out in the Refund & Cancellation Policy.',
       ],
     },
@@ -223,7 +223,7 @@ export const TERMS: PolicyDocument = {
       id: 'disputes',
       title: 'Complaints and Dispute Resolution',
       blocks: [
-        `If you have a complaint, please write to [${SITE.email}](mailto:${SITE.email}) with your order reference and details, and we will try to resolve it in good faith. Please also see the escalation section of the [Refund & Cancellation Policy](/refund).`,
+        `If you have a complaint, please write to [${SITE.email}](mailto:${SITE.email}) with your order reference and details, and we will try to resolve it in good faith. How complaints are handled and escalated is set out on our [Grievance Redressal](/grievance-redressal) page.`,
         'If a complaint is not resolved, you may use the remedies available to you under Indian law, including approaching the appropriate Consumer Disputes Redressal Commission or the National Consumer Helpline (1915) if you are a consumer. Subject to those rights and to any court or forum that has mandatory jurisdiction, courts at Noida, Uttar Pradesh, have jurisdiction over disputes under these Terms.',
       ],
     },

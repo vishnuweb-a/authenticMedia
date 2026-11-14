@@ -189,7 +189,7 @@ export const REFUND: PolicyDocument = {
       id: 'escalation',
       title: 'Grievance Escalation',
       blocks: [
-        `Start with ${MAIL}, quoting your order reference. If you are not satisfied with the response, you may escalate to the same address, marking the subject "Escalation", and you may use the remedies available to you by law, including the National Consumer Helpline (1915 or consumerhelpline.gov.in) and the Consumer Disputes Redressal Commission. For a transaction problem with your bank you may also approach your bank's grievance process and, if unresolved, the RBI Ombudsman.`,
+        `Start with ${MAIL}, quoting your order reference. If you are not satisfied with the response, you may escalate it as described on our [Grievance Redressal](/grievance-redressal) page, and you may use the remedies available to you by law, including the National Consumer Helpline (1915 or consumerhelpline.gov.in) and the Consumer Disputes Redressal Commission. For a transaction problem with your bank you may also approach your bank's grievance process and, if unresolved, the RBI Ombudsman.`,
       ],
     },
     {

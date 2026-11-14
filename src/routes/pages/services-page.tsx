@@ -1,8 +1,7 @@
-import {
-  CatalogueMicroServicesSection,
-  CoreOfferingsSection,
-  ServicesHero,
-} from '@/features/services'
+import { ApproachSection } from '@/features/about'
+import { useDocumentMeta } from '@/features/legal'
+import { ServicesBrowser, ServicesHero } from '@/features/services'
+import { ROUTES } from '@/routes/paths'
 
 /**
  * Services — the complete catalogue.
@@ -13,11 +12,18 @@ import {
  * (REFERENCE-LIMITATIONS.md → Screenshot Truncation).
  */
 export function ServicesPage() {
+  useDocumentMeta(
+    'Services — Authentic Media',
+    'Every fixed-price IT and digital service from Authentic Media, with prices: maintenance, audits, integrations, automation, branding and consulting.',
+    ROUTES.services,
+  )
+
   return (
     <>
       <ServicesHero />
-      <CoreOfferingsSection />
-      <CatalogueMicroServicesSection />
+      <ServicesBrowser />
+      {/* How ordering and delivery work (audit §4.4/§4.5) — shared with About. */}
+      <ApproachSection />
     </>
   )
 }

@@ -1,0 +1,127 @@
+import type { Page, Request } from '@playwright/test'
+
+import { ALL_SERVICES } from '../../src/features/services/data/catalogue.data'
+
+/** A host that cannot resolve, so an unmocked hand-off could never reach a gateway. */
+export const MOCK_GATEWAY = 'https://gateway.e2e.invalid/pay'
+
+export interface MockOptions {
+  catalogue?: 'ok' | 'error'
+  createPayment?: 'ok' | 'error'
+  orderStatus?: string
+  /** Slugs already in the persisted cart when the page loads. */
+  seedCart?: string[]
+  /**
+   * A service that is inactive: hidden from the catalogue read and skipped by
+   * the order RPC, but still returned by get_cart (the unverified worst case).
+   */
+  retiredSlug?: string
+  /** Overrides the server-priced amount, e.g. to simulate a price change. */
+  chargedAmount?: number
+}
+
+export interface MockLog {
+  createPaymentBodies: Record<string, unknown>[]
+  unmocked: string[]
+}
+
+const ROWS = ALL_SERVICES.map((s, i) => ({
+  slug: s.id,
+  title: s.title,
+  description: s.description,
+  subtitle: s.subtitle ?? null,
+  features: s.features ?? [],
+  price_inr: s.price,
+  icon: s.icon,
+  badge: s.badge ?? null,
+  position: i,
+  service_categories: { tier: s.tier },
+}))
+
+function json(body: unknown, status = 200) {
+  return { status, contentType: 'application/json', body: JSON.stringify(body) }
+}
+
+/**
+ * Installs offline stand-ins for Supabase (catalogue + cart RPCs), the payment
+ * API and the gateway. Anything else outside localhost is aborted and recorded,
+ * so a test fails loudly instead of quietly reaching a real service.
+ */
+export async function installMocks(page: Page, options: MockOptions = {}): Promise<MockLog> {
+  const log: MockLog = { createPaymentBodies: [], unmocked: [] }
+  const cart = new Set<string>(options.seedCart ?? [])
+  const retired = options.retiredSlug
+  const activeRows = ROWS.filter((r) => r.slug !== retired)
+  const retiredRow = { ...ROWS[0], slug: retired ?? '', title: 'Retired Service', price_inr: 499 }
+
+  await page.route(/supabase\.co\//, async (route, request: Request) => {
+    const url = new URL(request.url())
+
+    if (url.pathname === '/rest/v1/services') {
+      if (options.catalogue === 'error') return route.fulfill(json({ message: 'down' }, 400))
+      // Only active rows are readable, as with the production RLS policy.
+      // `slug=eq.a` (one service) or `slug=in.(a,b)` (the cart's price check).
+      const filter = url.searchParams.get('slug')
+      const slugs = filter?.replace(/^eq\./, '').replace(/^in\.\((.*)\)$/, '$1').split(',').map((s) => s.replace(/^"|"$/g, ''))
+      return route.fulfill(json(slugs ? activeRows.filter((r) => slugs.includes(r.slug)) : activeRows))
+    }
+
+    const rpc = url.pathname.match(/^\/rest\/v1\/rpc\/(\w+)$/)?.[1]
+    if (rpc) {
+      const params = (request.postDataJSON() ?? {}) as Record<string, string>
+      if (rpc === 'add_cart_item') cart.add(params.p_service_slug)
+      if (rpc === 'remove_cart_item') cart.delete(params.p_service_slug)
+      if (rpc === 'clear_cart') cart.clear()
+      if (rpc === 'get_cart' || rpc.endsWith('_cart_item') || rpc === 'clear_cart') {
+        const rows = [...ROWS, ...(retired ? [retiredRow] : [])].filter((r) => cart.has(r.slug)).map((r) => ({
+          service_slug: r.slug,
+          title: r.title,
+          price_inr: r.price_inr,
+          icon: r.icon,
+        }))
+        return route.fulfill(json(rpc === 'get_cart' ? rows : null))
+      }
+    }
+
+    log.unmocked.push(`${request.method()} ${url.pathname}`)
+    return route.fulfill(json({ message: 'unmocked in e2e' }, 501))
+  })
+
+  await page.route('**/api/payments/create', async (route, request) => {
+    const body = request.postDataJSON() as Record<string, unknown>
+    log.createPaymentBodies.push(body)
+    if (options.createPayment === 'error') return route.fulfill(json({ error: 'x' }, 502))
+    // Priced like create_airpay_order: active services only, current price.
+    const slugs = (body.serviceSlugs as string[] | undefined) ?? []
+    const serverAmount = activeRows.filter((r) => slugs.includes(r.slug)).reduce((sum, r) => sum + r.price_inr, 0)
+    return route.fulfill(
+      json({
+        orderRef: 'AM-E2E-00000001',
+        accessToken: 'e2e-token',
+        amount: options.chargedAmount ?? serverAmount,
+        actionUrl: MOCK_GATEWAY,
+        fields: { mock: '1' },
+        returnsToSite: true,
+      }),
+    )
+  })
+
+  await page.route('**/api/orders/status**', (route) =>
+    route.fulfill(json({ status: options.orderStatus ?? 'paid', amount: 499, settled: true })),
+  )
+
+  await page.route('https://gateway.e2e.invalid/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html', body: '<h1>Mock gateway</h1>' }),
+  )
+
+  // Fonts and other third-party GETs are allowed; anything else external is blocked.
+  await page.route(
+    (url) => !/^(localhost|127\.0\.0\.1)$/.test(url.hostname) && !/supabase\.co$|e2e\.invalid$|fonts\.(googleapis|gstatic)\.com$/.test(url.hostname),
+    (route) => {
+      log.unmocked.push(route.request().url())
+      return route.abort()
+    },
+  )
+
+  return log
+}

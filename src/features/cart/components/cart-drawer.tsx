@@ -65,7 +65,7 @@ export function CartDrawer() {
       <div
         aria-hidden="true"
         onClick={closeCart}
-        className="absolute inset-0 bg-black/65 motion-safe:animate-[fade-in_180ms_ease-out]"
+        className="absolute inset-0 bg-slate-900/40 motion-safe:animate-[fade-in_180ms_ease-out]"
       />
 
       <div
@@ -84,7 +84,7 @@ export function CartDrawer() {
             type="button"
             onClick={closeCart}
             aria-label="Close cart"
-            className="-mr-1 inline-flex size-9 shrink-0 items-center justify-center rounded-pill text-text-muted transition-colors hover:bg-white/5 hover:text-text"
+            className="-mr-1 inline-flex size-9 shrink-0 items-center justify-center rounded-pill text-text-muted transition-colors hover:bg-text/5 hover:text-text"
           >
             <X aria-hidden="true" className="size-5" />
           </button>

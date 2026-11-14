@@ -36,7 +36,7 @@ export function CartLineItem({ item, onRemove }: CartLineItemProps) {
         type="button"
         onClick={() => onRemove(item.serviceId)}
         aria-label={`Remove ${item.title} from cart`}
-        className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500 transition-colors hover:bg-red-500/20"
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-600 transition-colors hover:bg-red-500/20"
       >
         <Trash2 aria-hidden="true" className="size-4" />
       </button>

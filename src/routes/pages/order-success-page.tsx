@@ -51,7 +51,7 @@ export function OrderSuccessPage() {
     case 'paid':
       return (
         <Outcome
-          icon={<CheckCircle2 aria-hidden="true" className="size-10 text-emerald-400" />}
+          icon={<CheckCircle2 aria-hidden="true" className="size-10 text-emerald-600" />}
           title="Payment confirmed"
           body={`We have received ${amount > 0 ? formatInr(amount) : 'your payment'}. Our team will contact you using the details you gave at checkout to get started.`}
           reference={orderRef}
@@ -61,7 +61,7 @@ export function OrderSuccessPage() {
     case 'failed':
       return (
         <Outcome
-          icon={<AlertCircle aria-hidden="true" className="size-10 text-red-400" />}
+          icon={<AlertCircle aria-hidden="true" className="size-10 text-red-600" />}
           title="That payment did not go through"
           body="We could not confirm this payment. If your account was debited, your bank normally reverses it automatically; please check your statement and contact us with your order reference if the amount is not returned. You can also try again from your cart. See our Refund & Cancellation Policy for details."
           reference={orderRef}
@@ -71,7 +71,7 @@ export function OrderSuccessPage() {
     case 'requires-review':
       return (
         <Outcome
-          icon={<Clock aria-hidden="true" className="size-10 text-amber-400" />}
+          icon={<Clock aria-hidden="true" className="size-10 text-amber-600" />}
           title="Your payment needs a quick check"
           body="We have received a payment but the amount did not match your order, so our team is reviewing it manually. We will contact you shortly — please do not pay again."
           reference={orderRef}
@@ -83,7 +83,7 @@ export function OrderSuccessPage() {
       // answer, and inventing an outcome is the bug this design avoids.
       return (
         <Outcome
-          icon={<Clock aria-hidden="true" className="size-10 text-amber-400" />}
+          icon={<Clock aria-hidden="true" className="size-10 text-amber-600" />}
           title="Still confirming your payment"
           body="This is taking longer than usual. Your payment may still complete — please do not pay again. Refresh this page in a few minutes, or contact us with your order reference."
           reference={orderRef}

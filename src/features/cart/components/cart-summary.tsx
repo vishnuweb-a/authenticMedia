@@ -48,7 +48,7 @@ export function CartSummary({
           /order-success once the server has verified it. */}
       <div role="status" aria-live="polite">
         {status === 'failed' && error && (
-          <p className="mt-4 flex items-start gap-2 text-[14px] text-red-400">
+          <p className="mt-4 flex items-start gap-2 text-[14px] text-red-700">
             <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             {error}
           </p>

@@ -52,15 +52,14 @@ export const ABOUT_CONTENT: AboutContent = {
       'The areas we cover for our clients — end to end, rather than one project at a time.',
   },
 
-  // [RECONSTRUCTED] — the four steps restate the verified sentence "understand
-  // the client's challenges, design smart systems, and deliver solutions that
-  // are efficient, secure, and easy to manage", split into its own clauses.
+  // The real order-to-delivery workflow, restated from the Service Delivery
+  // Policy and the checkout code (audit §4.1 business model, §4.5 walkthrough).
   approach: {
-    eyebrow: 'HOW WE WORK',
-    title: 'Our',
-    titleAccent: 'Approach',
+    eyebrow: 'HOW IT WORKS',
+    title: 'From order to',
+    titleAccent: 'delivery',
     description:
-      'Simple by design: understand the problem, design the system, deliver it, and keep it running.',
+      'The same process applies to every service we sell — from choosing it on this website to receiving the work.',
   },
 
   // [VERIFIED] — full-bleed violet band with a faint grid, white heading with no
@@ -127,36 +126,68 @@ export const ABOUT_CAPABILITIES = [
 ] as const satisfies readonly AboutCapability[]
 
 /**
- * [RECONSTRUCTED] The four steps are the clauses of the verified approach
- * sentence, in the order the narrative states them.
+ * The engagement workflow. Each step describes what the website and the team
+ * actually do (see the Service Delivery and Refund policies) — no turnaround
+ * time is promised, because none has been confirmed.
  */
 export const ABOUT_APPROACH_STEPS = [
   {
-    id: 'understand',
+    id: 'choose',
     step: '01',
-    title: 'Understand',
+    title: 'Choose a service',
     description:
-      "We start with the client's challenges — what is slowing the business down, and what it needs to do next.",
+      'Pick a fixed-price service from our catalogue and add it to your cart. Not sure which fits? Contact us first and we will advise.',
   },
   {
-    id: 'design',
+    id: 'pay',
     step: '02',
-    title: 'Design',
+    title: 'Pay securely',
     description:
-      'We design smart systems around those challenges: practical, scalable, and built to last beyond today.',
+      "Pay on the Airpay payment gateway's hosted page. Your order is confirmed only after we verify the payment with the gateway.",
+  },
+  {
+    id: 'scope',
+    step: '03',
+    title: 'Confirm the scope',
+    description:
+      'Our team contacts you by email or phone to confirm the exact scope, the information or access we need, and the expected timing.',
   },
   {
     id: 'deliver',
-    step: '03',
-    title: 'Deliver',
-    description:
-      'We deliver solutions that are efficient and secure, and that fit the way the business already works.',
-  },
-  {
-    id: 'maintain',
     step: '04',
-    title: 'Maintain',
+    title: 'Delivery and support',
     description:
-      'We keep them easy to manage, so the systems stay reliable long after they go live.',
+      'We deliver remotely — a report, configuration on your systems, or files — and support you afterwards using your order reference.',
   },
 ] as const satisfies readonly AboutApproachStep[]
+
+/**
+ * Business operations. Each line restates the Terms, Service Delivery, Refund
+ * or Grievance policy — no SLA, turnaround or guarantee is added.
+ */
+export const ABOUT_OPERATIONS = [
+  {
+    id: 'ordering',
+    title: 'Ordering',
+    description:
+      'Customers order one-time, fixed-price services on this website as guests — no account or subscription. The price shown in the cart is the price charged. See the [Terms & Conditions](/terms).',
+  },
+  {
+    id: 'payments',
+    title: 'Payments',
+    description:
+      'Payment is taken on the Airpay payment gateway\u2019s hosted page. An order is treated as paid only after we verify the payment directly with the gateway and the amount matches.',
+  },
+  {
+    id: 'delivery',
+    title: 'Delivery',
+    description:
+      'Fulfilment is manual and remote. Our team confirms the scope, collects the information and access needed, and delivers by report, configuration or files. See the [Service Delivery Policy](/service-delivery-policy).',
+  },
+  {
+    id: 'support',
+    title: 'Support, refunds and complaints',
+    description:
+      'Support is by email and phone, quoting the order reference. Cancellations and refunds follow the [Refund & Cancellation Policy](/refund), and complaints the [Grievance Redressal](/grievance-redressal) procedure.',
+  },
+] as const satisfies readonly { id: string; title: string; description: string }[]

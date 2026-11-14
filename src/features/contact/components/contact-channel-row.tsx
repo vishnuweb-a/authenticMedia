@@ -22,7 +22,7 @@ export function ContactChannelRow({ channel }: { channel: ContactChannel }) {
     <li className="flex items-start gap-[17px]">
       <span
         aria-hidden="true"
-        className="mt-0.5 inline-flex size-[42px] shrink-0 items-center justify-center rounded-[14px] border border-border-strong bg-[#1D1448] text-primary-mid"
+        className="mt-0.5 inline-flex size-[42px] shrink-0 items-center justify-center rounded-[14px] border border-border-strong bg-surface-badge text-primary-mid"
       >
         <Icon className="size-5" />
       </span>

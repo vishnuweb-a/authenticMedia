@@ -1,3 +1,5 @@
+import { useDocumentMeta } from '@/features/legal'
+import { ROUTES } from '@/routes/paths'
 import { ContactFormSection, ContactHero, DirectContactSection } from '@/features/contact'
 
 /**
@@ -10,6 +12,12 @@ import { ContactFormSection, ContactHero, DirectContactSection } from '@/feature
  * from AppShell.
  */
 export function ContactPage() {
+  useDocumentMeta(
+    'Contact Us — Authentic Media',
+    'Email, phone and registered office address of Authentic Media and IT Sector Private Limited, and an enquiry form.',
+    ROUTES.contact,
+  )
+
   return (
     <>
       <ContactHero />

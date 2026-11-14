@@ -27,3 +27,11 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Playwright
+test-results
+playwright-report
+
+# Local tool state (Vercel project link, Supabase CLI cache)
+.vercel
+supabase/.temp

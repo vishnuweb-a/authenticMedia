@@ -15,7 +15,7 @@ export type ButtonSize = 'lg' | 'sm'
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary:
-    'bg-gradient-primary text-text font-bold shadow-glow-primary hover:brightness-108 active:scale-[0.98]',
+    'bg-gradient-primary text-on-primary font-bold shadow-glow-primary hover:brightness-108 active:scale-[0.98]',
   secondary:
     'bg-transparent text-text font-semibold border border-border-secondary hover:bg-primary-start/10 active:scale-[0.98]',
   cart: 'bg-surface-cta-muted text-text-violet font-bold border border-primary-start/30 hover:brightness-115 active:scale-[0.98]',

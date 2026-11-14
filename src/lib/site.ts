@@ -8,29 +8,56 @@ export const SITE = {
   legalName: 'Authentic Media and IT Sector Private Limited',
   shortName: 'Authentic Media',
   description:
-    'Technology-driven solutions for businesses that want to grow, stay secure, and move forward.',
+    'IT and digital services for businesses: audits, maintenance, automation, branding and consulting, ordered online and delivered remotely.',
   email: 'contact@authenticmedia.fun',
   phone: '7669438261',
   website: 'authenticmedia.fun',
   address: {
     lines: [
-      'UNIT NO 44, FORTH FLOOR, TOWER A,',
-      'PLOT NO A-16, ITHUM HEIGHTS,',
-      'SECTOR 62, Noida, UP-201301, India',
+      'Unit No. 44, Fourth Floor, Tower A,',
+      'Plot No. A-16, Ithum Heights,',
+      'Sector 62, Noida, Uttar Pradesh – 201301, India',
     ],
     single:
-      'UNIT NO 44, FORTH FLOOR, TOWER A, PLOT NO A-16, ITHUM HEIGHTS, SECTOR 62, Noida, UP-201301, India',
+      'Unit No. 44, Fourth Floor, Tower A, Plot No. A-16, Ithum Heights, Sector 62, Noida, Uttar Pradesh – 201301, India',
   },
   copyrightYear: 2026,
 } as const
 
+export interface Director {
+  name: string
+  designation: string
+  /** Verified professional background only — leave out anything unconfirmed. */
+  background: string
+  /** Director Identification Number, if the company chooses to publish it. */
+  din?: string
+}
+
+export interface GrievanceOfficer {
+  name: string
+  designation: string
+  email: string
+  phone: string
+}
+
 /**
- * Social destinations. The three tiles are verified in the footer capture; the
- * URLs themselves were never visible, so they stay as placeholders until real
- * profile links are supplied.
+ * Statutory disclosures requested by the merchant-onboarding audit
+ * (authenticmedia.report.pdf §4.2).
+ *
+ * ⚠ BLOCKED ON MERCHANT INPUT. Every value must be copied from the company's
+ * own documents (certificate of incorporation, GST certificate, board records)
+ * — never guessed. A null / empty value is simply not rendered, so the site
+ * never shows a placeholder or an invented number. Fill these in and every
+ * page that discloses them (footer, About, Grievance Redressal) updates.
  */
-export const SOCIAL_LINKS = [
-  { label: 'LinkedIn', href: '#', icon: 'linkedin' },
-  { label: 'X', href: '#', icon: 'x' },
-  { label: 'Instagram', href: '#', icon: 'instagram' },
-] as const
+export const LEGAL: {
+  cin: string | null
+  gstin: string | null
+  directors: readonly Director[]
+  grievanceOfficer: GrievanceOfficer | null
+} = {
+  cin: null,
+  gstin: null,
+  directors: [],
+  grievanceOfficer: null,
+}

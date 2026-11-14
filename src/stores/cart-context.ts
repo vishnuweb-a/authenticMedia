@@ -16,6 +16,8 @@ export interface CartContextValue {
   addItem: (item: CartItem) => void
   removeItem: (serviceId: string) => void
   clear: () => void
+  /** Re-reads the persisted cart, e.g. after checkout found the server total differs. */
+  refresh: () => void
   hasItem: (serviceId: string) => boolean
   openCart: () => void
   closeCart: () => void

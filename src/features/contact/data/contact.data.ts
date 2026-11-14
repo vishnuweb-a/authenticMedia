@@ -86,10 +86,9 @@ export const CONTACT_FORM_CONTENT = {
   title: 'Tell us what you',
   titleAccent: 'need.',
   description:
-    'Share a few details and the right person on our team will get back to you.',
+    'Share a few details and we will open a pre-filled email to our team in your email app — just press send.',
   submitLabel: 'Send Message',
-  successTitle: 'Please contact us directly',
-  successBody:
-    "This form is not yet connected to our inbox, so your message has not reached us. Please email contact@authenticmedia.fun or call us directly.",
-  successAction: 'Send another message',
+  successTitle: 'Your email is ready to send',
+  successBody: `Your email app should now be open with your message addressed to ${SITE.email}. Press send there to reach us. If nothing opened, email ${SITE.email} or call ${SITE.phone} directly.`,
+  successAction: 'Write another message',
 } as const

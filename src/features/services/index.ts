@@ -19,16 +19,14 @@
 export {
   CatalogueEmpty,
   CatalogueError,
-  CatalogueMicroServicesSection,
   CatalogueSkeleton,
-  CoreOfferingsSection,
   MicroServiceCard,
   ServiceCard,
+  ServicesBrowser,
   ServicesHero,
 } from './components'
 export {
   ALL_SERVICES,
-  CATALOGUE_SIZE,
   CORE_SERVICES,
   HOME_CORE_SERVICES,
   MICRO_SERVICES,
@@ -36,4 +34,5 @@ export {
 export { SERVICES_CONTENT } from './data/services.data'
 export { useAddToCart } from './hooks/use-add-to-cart'
 export { useCatalogue } from './hooks/use-catalogue'
+export { useService } from './hooks/use-service'
 export type * from './types/services.types'

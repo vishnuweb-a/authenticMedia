@@ -13,8 +13,14 @@ export const ROUTES = {
   privacy: '/privacy',
   refund: '/refund',
   serviceDelivery: '/service-delivery-policy',
+  grievance: '/grievance-redressal',
+  faq: '/faq',
+  policies: '/policies',
   orderSuccess: '/order-success',
 } as const
+
+/** An individual service's detail page. The slug is the catalogue id. */
+export const servicePath = (slug: string) => `${ROUTES.services}/${slug}`
 
 export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES]
 
@@ -28,6 +34,7 @@ export const PRIMARY_NAV: readonly NavLinkItem[] = [
   { label: 'Home', to: ROUTES.home },
   { label: 'Services', to: ROUTES.services },
   { label: 'About Us', to: ROUTES.about },
+  { label: 'FAQs', to: ROUTES.faq },
   { label: 'Contact Us', to: ROUTES.contact },
 ]
 
@@ -36,7 +43,10 @@ export const FOOTER_LINKS: readonly NavLinkItem[] = [
   { label: 'Homepage', to: ROUTES.home },
   { label: 'Services', to: ROUTES.services },
   { label: 'About Us', to: ROUTES.about },
+  { label: 'FAQs', to: ROUTES.faq },
   { label: 'Contact Us', to: ROUTES.contact },
+  { label: 'Policies', to: ROUTES.policies },
+  { label: 'Grievance Redressal', to: ROUTES.grievance },
   { label: 'Terms & Conditions', to: ROUTES.terms },
   { label: 'Privacy Policy', to: ROUTES.privacy },
   { label: 'Refund & Cancellation', to: ROUTES.refund },

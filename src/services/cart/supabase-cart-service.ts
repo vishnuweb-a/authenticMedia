@@ -13,6 +13,29 @@ function toCartItem(row: CartRow): CartItem {
   }
 }
 
+export interface ActivePrice {
+  slug: string
+  price_inr: number
+}
+
+/**
+ * Keeps the cart identical to what create_airpay_order will charge: that RPC
+ * prices ONLY `is_active` services at their current `price_inr` and silently
+ * skips anything else. get_cart's definition is not in this repository, so it
+ * is not trusted to do the same — a retired service is dropped from the cart
+ * and every price is taken from the active catalogue row.
+ */
+export function reconcileCartRows(
+  rows: readonly CartRow[],
+  active: readonly ActivePrice[],
+): CartItem[] {
+  const prices = new Map(active.map((row) => [row.slug, row.price_inr]))
+  return rows.flatMap((row) => {
+    const price = prices.get(row.service_slug)
+    return price === undefined ? [] : [{ ...toCartItem(row), price }]
+  })
+}
+
 /**
  * Supabase-backed cart.
  *
@@ -47,7 +70,21 @@ function createSupabaseCartService(): CartService {
       return err<readonly CartItem[]>('cart_read_failed', 'We could not load your cart.')
     }
 
-    return ok<readonly CartItem[]>(((data ?? []) as CartRow[]).map(toCartItem))
+    const rows = (data ?? []) as CartRow[]
+    if (rows.length === 0) return ok<readonly CartItem[]>([])
+
+    // The same public, RLS-limited read the catalogue page makes (active rows only).
+    const active = await supabase
+      .from('services')
+      .select('slug, price_inr')
+      .eq('is_active', true)
+      .in('slug', rows.map((row) => row.service_slug))
+
+    // Without the catalogue the rows are shown as-is; checkout still refuses
+    // to hand off if the server's amount differs from the displayed total.
+    if (active.error) return ok<readonly CartItem[]>(rows.map(toCartItem))
+
+    return ok<readonly CartItem[]>(reconcileCartRows(rows, (active.data ?? []) as ActivePrice[]))
   }
 
   return {

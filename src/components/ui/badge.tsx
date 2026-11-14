@@ -20,7 +20,7 @@ export function Badge({
       aria-hidden="true"
       className={cn(
         'inline-flex min-w-5 items-center justify-center rounded-pill bg-gradient-primary',
-        'size-5 px-1 text-[11px] leading-none font-bold text-text',
+        'size-5 px-1 text-[11px] leading-none font-bold text-on-primary',
         className,
       )}
     >

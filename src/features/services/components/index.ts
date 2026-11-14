@@ -1,6 +1,5 @@
 export { MicroServiceCard } from './micro-service-card'
 export { ServiceCard } from './service-card'
 export { ServicesHero } from './services-hero'
-export { CoreOfferingsSection } from './core-offerings-section'
-export { CatalogueMicroServicesSection } from './catalogue-micro-services-section'
+export { ServicesBrowser } from './services-browser'
 export { CatalogueEmpty, CatalogueError, CatalogueSkeleton } from './catalogue-states'

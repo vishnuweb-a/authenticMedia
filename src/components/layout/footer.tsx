@@ -1,10 +1,10 @@
-import { ChevronRight, Globe, Instagram, Linkedin, Mail, MapPin, Phone } from 'lucide-react'
+import { ChevronRight, Globe, Mail, Phone } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Container } from './container'
 import { Logo } from './logo'
-import { SITE, SOCIAL_LINKS } from '@/lib/site'
+import { LEGAL, SITE } from '@/lib/site'
 import { FOOTER_LINKS } from '@/routes/paths'
 
 /** Violet uppercase tracked heading — eyebrow treatment minus the pill. */
@@ -13,21 +13,6 @@ function FooterHeading({ children }: { children: ReactNode }) {
     <h2 className="text-[13px] font-bold tracking-[0.12em] text-primary-mid uppercase">
       {children}
     </h2>
-  )
-}
-
-const SOCIAL_ICONS = {
-  linkedin: Linkedin,
-  instagram: Instagram,
-  x: XIcon,
-} as const
-
-/** Lucide has no X/Twitter glyph, so the wordmark is drawn inline. */
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-    </svg>
   )
 }
 
@@ -49,23 +34,6 @@ export function Footer() {
             <p className="max-w-sm text-[15px] text-text-muted">
               {SITE.legalName} — {SITE.description}
             </p>
-
-            <ul className="flex items-center gap-3">
-              {SOCIAL_LINKS.map((social) => {
-                const Icon = SOCIAL_ICONS[social.icon]
-                return (
-                  <li key={social.label}>
-                    <a
-                      href={social.href}
-                      aria-label={social.label}
-                      className="inline-flex size-12 items-center justify-center rounded-tile border border-border bg-surface text-text-muted transition-colors hover:text-text"
-                    >
-                      <Icon className="size-5" />
-                    </a>
-                  </li>
-                )
-              })}
-            </ul>
           </div>
 
           {/* Quick links */}
@@ -107,9 +75,6 @@ export function Footer() {
           <section className="flex flex-col gap-4">
             <FooterHeading>Contact Info</FooterHeading>
             <ul className="flex flex-col gap-3 text-[15px] text-text-muted">
-              <ContactRow icon={<MapPin className="size-4" />}>
-                {SITE.address.single}
-              </ContactRow>
               <ContactRow icon={<Phone className="size-4" />}>
                 <a href={`tel:${SITE.phone}`} className="rounded-md hover:text-text">
                   {SITE.phone}
@@ -134,6 +99,14 @@ export function Footer() {
         </div>
 
         <div className="mt-14 border-t border-border/60 pt-6">
+          {/* Statutory identifiers render only once supplied — see LEGAL in site.ts. */}
+          {(LEGAL.cin || LEGAL.gstin) && (
+            <p className="mb-2 text-center text-sm text-text-muted">
+              {LEGAL.cin && <span>CIN: {LEGAL.cin}</span>}
+              {LEGAL.cin && LEGAL.gstin && <span aria-hidden="true"> · </span>}
+              {LEGAL.gstin && <span>GSTIN: {LEGAL.gstin}</span>}
+            </p>
+          )}
           <p className="text-center text-sm text-text-subtle">
             Copyright {SITE.copyrightYear} © {SITE.legalName}. All rights reserved.
           </p>

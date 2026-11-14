@@ -197,7 +197,7 @@ export const PRIVACY: PolicyDocument = {
       id: 'grievance',
       title: 'Privacy Requests and Grievances',
       blocks: [
-        `Send privacy requests and complaints to ${MAIL}. We will respond within a reasonable time. A designated grievance officer's name and contact details will be published here when appointed. If you are not satisfied, you may use the remedies available under applicable law, including approaching the Data Protection Board of India once it is operational for complaints.`,
+        `Send privacy requests and complaints to ${MAIL}. We will respond within a reasonable time. Our full complaint and escalation procedure, including the Grievance Officer's details once designated, is on the [Grievance Redressal](/grievance-redressal) page. If you are not satisfied, you may use the remedies available under applicable law, including approaching the Data Protection Board of India once it is operational for complaints.`,
       ],
     },
     {

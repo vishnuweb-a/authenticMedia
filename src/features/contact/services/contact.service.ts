@@ -1,3 +1,4 @@
+import { SITE } from '@/lib/site'
 import { err, ok, type ServiceResult } from '@/services/result'
 import type { ContactFormValues } from '../types/contact.types'
 
@@ -18,35 +19,33 @@ export interface ContactService {
   submitEnquiry(values: ContactFormValues): Promise<ServiceResult<ContactEnquiry>>
 }
 
-function delay(ms = 900): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+/** Builds the pre-filled email the visitor's mail app will open. */
+export function buildEnquiryMailto(values: ContactFormValues): string {
+  const subject = `Website enquiry from ${values.name.trim()}`
+  const body = `${values.message.trim()}\n\n— ${values.name.trim()} (${values.email.trim()})`
+  return `mailto:${SITE.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }
 
 /**
- * Frontend-only stand-in. It resolves locally and sends nothing anywhere — no
- * message actually reaches Authentic Media until a backend exists.
- *
- * Submitting the literal address `fail@example.com` returns a failure so the
- * error state is reachable during development.
+ * shortcut: there is no backend mailbox yet, so the enquiry is handed to the
+ * visitor's own email app, pre-filled and addressed to us. Swap this for a
+ * networked implementation when an /api/contact endpoint exists — no component
+ * changes needed.
  */
-function createMockContactService(): ContactService {
+function createMailtoContactService(): ContactService {
   return {
     async submitEnquiry(values: ContactFormValues) {
-      await delay()
-
-      if (values.email.trim().toLowerCase() === 'fail@example.com') {
+      try {
+        window.location.href = buildEnquiryMailto(values)
+      } catch {
         return err(
           'submission_failed',
-          "We couldn't send your message just now. Please try again.",
+          `We couldn't open your email app. Please email ${SITE.email} directly.`,
         )
       }
-
-      return ok({
-        enquiryId: `mock_${Date.now().toString(36)}`,
-        receivedAt: new Date().toISOString(),
-      })
+      return ok({ enquiryId: `mailto_${Date.now().toString(36)}`, receivedAt: new Date().toISOString() })
     },
   }
 }
 
-export const contactService: ContactService = createMockContactService()
+export const contactService: ContactService = createMailtoContactService()

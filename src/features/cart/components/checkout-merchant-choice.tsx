@@ -21,7 +21,11 @@ export interface CheckoutMerchantChoiceProps {
  *
  * ⚠ What each option means is a server-side detail. This component knows only
  * `1` and `2`; no MID, credential or gateway URL exists in the browser, so
- * there is nothing here for a tampered client to escalate into. The selection
+ * there is nothing here for a tampered client to escalate into.
+ *
+ * Labels must differ, or a screen reader announces two identical radios. They
+ * are numbered rather than described: no difference in capability between the
+ * two accounts has been established, so none is claimed. The selection
  * is an index the server validates against an allowlist before it maps it onto
  * credentials it holds itself.
  */
@@ -31,11 +35,11 @@ const OPTIONS: ReadonlyArray<{
 }> = [
   {
     value: 1,
-    label: 'Pay with airpay',
+    label: 'Pay with airpay — Option 1',
   },
   {
     value: 2,
-    label: 'Pay with airpay',
+    label: 'Pay with airpay — Option 2',
   },
 ]
 
@@ -59,10 +63,10 @@ export function CheckoutMerchantChoice({
           return (
             <label
               key={option.value}
-              className={`group flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3.5 transition-colors focus-within:ring-2 focus-within:ring-white/40 ${
+              className={`group flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3.5 transition-colors focus-within:ring-2 focus-within:ring-primary-mid/40 ${
                 selected
-                  ? 'border-white/35 bg-surface-drawer-panel'
-                  : 'border-border-drawer bg-transparent hover:border-white/20'
+                  ? 'border-primary-mid bg-surface-drawer-panel'
+                  : 'border-border-drawer bg-transparent hover:border-text/20'
               } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
             >
               <input
@@ -77,7 +81,7 @@ export function CheckoutMerchantChoice({
               <span
                 aria-hidden="true"
                 className={`mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                  selected ? 'border-white bg-white text-black' : 'border-white/35'
+                  selected ? 'border-primary-mid bg-primary-mid text-on-primary' : 'border-text/35'
                 }`}
               >
                 {selected && <Check className="size-3" strokeWidth={3} />}

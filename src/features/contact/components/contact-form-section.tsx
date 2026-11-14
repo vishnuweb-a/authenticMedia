@@ -102,7 +102,7 @@ export function ContactFormSection() {
               {submitError && (
                 <p
                   role="alert"
-                  className="rounded-input border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+                  className="rounded-input border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
                 >
                   {submitError}
                 </p>

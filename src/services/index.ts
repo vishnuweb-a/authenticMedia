@@ -1,5 +1,5 @@
 export { authService } from './auth'
-export type { AuthService, SignInInput } from './auth'
+export type { AuthService, SignInInput, SignUpInput } from './auth'
 
 export { catalogueRepository } from './catalogue'
 export type { CatalogueRepository } from './catalogue'

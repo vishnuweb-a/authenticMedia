@@ -39,9 +39,9 @@ Custom utilities: `gradient-text`, `bg-gradient-primary`, `bg-gradient-primary-l
 
 ## Integration boundaries
 
-`src/services/auth` and `src/services/payment` define interfaces with mock
-implementations. UI talks to the exported `authService` / `paymentService` binding
-only. Supabase and Airpay are **not** integrated, and no credentials belong in this
+`src/services/auth` and `src/services/payment` define the integration interfaces.
+UI talks to the exported `authService` / `paymentService` binding only. Accounts use
+custom server-side auth at `/api/auth` (not Supabase Auth) — see `docs/AUTH-SETUP.md`. Supabase and Airpay are **not** integrated, and no credentials belong in this
 codebase — the real payment flow will run through a backend.
 
 ## Implementing a screen

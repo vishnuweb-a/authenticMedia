@@ -8,7 +8,9 @@ Your responsibility is to build each requested feature as a production-quality f
 
 The application will eventually use:
 
-Supabase for authentication/database/backend capabilities.
+Supabase PostgreSQL for the database/backend capabilities. User accounts use a
+custom server-side auth system on that database (docs/AUTH-SETUP.md), not
+Supabase Auth.
 
 Airpay for payment processing.
 
@@ -301,9 +303,19 @@ useAuth()
  ↓
 AuthService
  ↓
-MockAuthService (now)
+apiAuthService (src/services/auth/api-auth-service.ts)
  ↓
-SupabaseAuthService (later)
+/api/auth/[action].ts (one Vercel function, HttpOnly cookie session)
+ ↓
+service-role RPC → public.auth_* → app_private.app_users
+
+Authentication is implemented and is NOT Supabase Auth. Do not add Supabase
+Auth, a browser-side session, or tokens in localStorage. Route guards
+(RequireAuth / GuestOnly) are UX only; the API enforces every rule. Anyone may
+register at /register (always unverified, signed in on creation; the
+AUTH_PUBLIC_REGISTRATION=false kill switch closes it). Verified accounts are
+provisioned only by an operator with scripts/provision-user.mjs; no endpoint may
+create a verified account. See docs/AUTH-SETUP.md.
 
 8. Supabase Rule
 

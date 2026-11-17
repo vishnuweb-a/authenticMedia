@@ -1,4 +1,4 @@
-import type { Session } from '@/types'
+import type { User } from '@/types'
 import type { ServiceResult } from '@/services/result'
 
 export interface SignInInput {
@@ -6,15 +6,21 @@ export interface SignInInput {
   password: string
 }
 
+export interface SignUpInput extends SignInInput {
+  name: string
+}
+
 /**
- * The authentication boundary.
- *
- * A Supabase-backed implementation will satisfy this interface later; UI code
- * must depend only on this contract, never on a provider SDK (CLAUDE.md §8).
+ * The authentication boundary. UI code depends only on this contract; the
+ * implementation talks to the same-origin /api/auth endpoints (cookie session).
  */
 export interface AuthService {
-  signIn(input: SignInInput): Promise<ServiceResult<Session>>
-  signOut(): Promise<ServiceResult<void>>
   /** Resolves to null when nobody is signed in. */
-  getSession(): Promise<ServiceResult<Session | null>>
+  getCurrentUser(): Promise<ServiceResult<User | null>>
+  signIn(input: SignInInput): Promise<ServiceResult<User>>
+  /** Creates an UNVERIFIED account and signs it in (session cookie set by the server). */
+  signUp(input: SignUpInput): Promise<ServiceResult<User>>
+  signOut(): Promise<ServiceResult<void>>
+  updateName(name: string): Promise<ServiceResult<User>>
+  requestPasswordReset(email: string): Promise<ServiceResult<void>>
 }

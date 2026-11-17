@@ -22,6 +22,18 @@ export interface MockOptions {
   isgpay?: boolean
   /** Body of /api/payments/isgpay/status (ISG references only). */
   isgpayStatus?: Record<string, unknown>
+  /** Start signed in as the e2e account (default: signed out). */
+  signedIn?: boolean
+}
+
+/** The one account the /api/auth mock accepts. */
+export const E2E_ACCOUNT = { email: 'asha@example.com', password: 'correct-horse-9' }
+const E2E_USER = {
+  id: 'e2e-user',
+  name: 'Asha Rao',
+  email: E2E_ACCOUNT.email,
+  emailVerified: true,
+  createdAt: '2026-11-01T00:00:00.000Z',
 }
 
 export interface MockLog {
@@ -147,6 +159,43 @@ export async function installMocks(page: Page, options: MockOptions = {}): Promi
   await page.route('**/api/payments/isgpay/status**', (route) =>
     route.fulfill(json({ status: 'paid', amountInr: 499, settled: true, testMode: true, ...options.isgpayStatus })),
   )
+
+  // Stateful stand-in for /api/auth (cookie session lives in this closure).
+  let user = options.signedIn ? { ...E2E_USER } : null
+  await page.route('**/api/auth/**', async (route, request) => {
+    const action = new URL(request.url()).pathname.split('/').pop()
+    const body = (request.postDataJSON() ?? {}) as Record<string, string>
+    if (action === 'me') return route.fulfill(json({ user }))
+    if (action === 'login') {
+      if (body['email'] !== E2E_ACCOUNT.email || body['password'] !== E2E_ACCOUNT.password) {
+        return route.fulfill(json({ error: 'invalid_credentials' }, 401))
+      }
+      user = { ...E2E_USER }
+      return route.fulfill(json({ user }))
+    }
+    if (action === 'register') {
+      if (body['email']?.trim().toLowerCase() === E2E_ACCOUNT.email) {
+        return route.fulfill(json({ error: 'email_taken' }, 409))
+      }
+      user = {
+        id: 'e2e-new-user',
+        name: body['fullName'] ?? '',
+        email: body['email']?.trim().toLowerCase() ?? '',
+        emailVerified: false,
+        createdAt: '2026-11-17T00:00:00.000Z',
+      }
+      return route.fulfill(json({ user }, 201))
+    }
+    if (action === 'logout') {
+      user = null
+      return route.fulfill(json({ ok: true }))
+    }
+    if (action === 'profile' && user) {
+      user = { ...user, name: body['fullName'] ?? user.name }
+      return route.fulfill(json({ user }))
+    }
+    return route.fulfill(json({ error: 'not_found' }, 404))
+  })
 
   // Never the real sandbox: the hosted page is replaced by a stub that records the POST.
   await page.route('https://sandbox.isgpay.com/**', (route, request) => {

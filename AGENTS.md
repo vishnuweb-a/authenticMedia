@@ -22,7 +22,8 @@ Future integrations
 
 Do not implement these integrations unless a feature explicitly requires a frontend placeholder/interface:
 
-Supabase authentication/database/storage
+Supabase database/storage (authentication is already implemented as custom
+server-side auth, not Supabase Auth; see docs/AUTH-SETUP.md)
 
 Airpay/payment integration
 
@@ -460,19 +461,21 @@ This prevents vendor-specific logic from spreading throughout the UI.
 
 15. Authentication Placeholders
 
-If authentication screens are implemented before Supabase:
+Authentication is implemented (docs/AUTH-SETUP.md): useAuth() → AuthService →
+apiAuthService → /api/auth/{me,login,logout,register,profile} → Postgres RPC.
+There is no mock auth service any more. New auth screens:
 
 Build the complete UI.
 
-Implement frontend validation.
+Reuse the validation in src/features/auth/lib/validation.ts (shared with the API).
 
 Implement loading/error/success states.
 
-Use a mock authentication service where interaction is needed.
+Call authService only; never Supabase Auth, never store a token in the browser.
 
-Do not pretend a user is actually authenticated against Supabase.
-
-Clearly isolate the future integration point.
+Public registration is open (unverified accounts; AUTH_PUBLIC_REGISTRATION=false
+is the server kill switch). Keep password recovery behind AUTH_FEATURES until an
+email service exists, and grant nothing on an unverified email address.
 
 When Supabase is introduced, replace the service implementation rather than rewriting the UI.
 
@@ -506,7 +509,8 @@ feature-oriented,
 
 protected through route guards once authentication exists.
 
-During the frontend-only phase, routes may use mock auth state where necessary.
+Protected routes use the RequireAuth / GuestOnly guards in src/features/auth/.
+They are UX only; the server enforces authorisation.
 
 Do not duplicate route definitions across components.
 

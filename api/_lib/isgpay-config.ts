@@ -38,6 +38,19 @@ export const ISGPAY_ENDPOINTS: Readonly<Record<IsgpayEnv, { readonly sale: strin
 /** Hosts our own ReturnURL / callback URL may point at. */
 export const APPROVED_RETURN_HOSTS: readonly string[] = ['authenticmedia.fun', 'www.authenticmedia.fun']
 
+/**
+ * On a Vercel Preview deployment only, this deployment's own hostnames are
+ * also approved (UAT runs there). VERCEL_ENV / VERCEL_BRANCH_URL / VERCEL_URL
+ * are set by the platform, not by a request, so the URL is still always ours.
+ */
+function approvedReturnHosts(): readonly string[] {
+  if (process.env['VERCEL_ENV'] !== 'preview') return APPROVED_RETURN_HOSTS
+  const own = [process.env['VERCEL_BRANCH_URL'], process.env['VERCEL_URL']]
+    .map((host) => host?.trim().toLowerCase())
+    .filter((host): host is string => Boolean(host) && /^[a-z0-9-]+\.vercel\.app$/.test(host as string))
+  return [...APPROVED_RETURN_HOSTS, ...own]
+}
+
 /** The existing Airpay callback path. ISGPay must never be pointed at it. */
 const AIRPAY_CALLBACK_PATH = '/callback/cpm/arp_frontiva'
 
@@ -129,7 +142,7 @@ function ownUrl(name: string, isRequired: boolean): string | undefined {
     throw new ConfigError(`${name} is not a valid URL`)
   }
   if (url.protocol !== 'https:') throw new ConfigError(`${name} must use https`)
-  if (!APPROVED_RETURN_HOSTS.includes(url.hostname) || url.port || url.username || url.password) {
+  if (!approvedReturnHosts().includes(url.hostname) || url.port || url.username || url.password) {
     throw new ConfigError(`${name} must point at an approved Authentic Media host`)
   }
   if (url.pathname.startsWith(AIRPAY_CALLBACK_PATH)) {

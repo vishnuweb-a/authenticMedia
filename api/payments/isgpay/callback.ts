@@ -30,7 +30,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   }
 
   const ref = refFromGatewayPost(config, await readForm(req))
-  if (!ref.ok) {
+  if (ref.ok === false) {
     logEvent('isgpay.callback.unreadable', { reason: ref.reason })
     res.status(400).json({ error: 'invalid_request' })
     return

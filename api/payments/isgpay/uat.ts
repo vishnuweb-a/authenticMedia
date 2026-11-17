@@ -31,7 +31,13 @@ const FORM = `<form method="post">
 
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   const key = accessKey()
-  if (process.env['VERCEL_ENV'] === 'production' || key === null) {
+  // Production can serve the sandbox test only when a separate, explicit
+  // website-test flag is enabled. The high-entropy access key is still
+  // mandatory, and loadIsgpayConfig() still pins the gateway to UAT.
+  const productionTestDisabled =
+    process.env['VERCEL_ENV'] === 'production' &&
+    process.env['ISGPAY_UAT_WEBSITE_TEST_ENABLED'] !== 'true'
+  if (productionTestDisabled || key === null) {
     sendPage(res, 404, 'Not found', '<p>Not found.</p>')
     return
   }

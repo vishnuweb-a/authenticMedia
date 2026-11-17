@@ -82,3 +82,25 @@ describe('every policy escalates through the Grievance Redressal page', () => {
     }
   })
 })
+
+describe('published company details', () => {
+  it('registered office is the Dwarka address and Noida stays the business address', async () => {
+    const { SITE } = await import('./site')
+    expect(LEGAL.registeredOffice).toContain('Manish Global Mall')
+    expect(LEGAL.registeredOffice).toContain('Dwarka')
+    expect(LEGAL.registeredOffice).toContain('110075')
+    expect(SITE.address.single).toContain('Noida')
+    expect(LEGAL.cin).toBe('U73100DL2024PTC432840')
+    expect(LEGAL.gstin).toBe('09ABACA8829R1ZU')
+    expect(LEGAL.directors.map((d) => d.name)).toEqual(['Aliya Khan', 'Afsheen Khan'])
+  })
+
+  it('grievance page names Aliya Khan with the company phone and email', async () => {
+    vi.resetModules()
+    const { GRIEVANCE } = await import('@/features/legal/content/grievance')
+    const body = JSON.stringify(GRIEVANCE.sections)
+    expect(body).toContain('Name: Aliya Khan')
+    expect(body).toContain('7669438261')
+    expect(body).toContain('mailto:contact@authenticmedia.fun')
+  })
+})

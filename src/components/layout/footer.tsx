@@ -63,11 +63,7 @@ export function Footer() {
           <section className="flex flex-col gap-4">
             <FooterHeading>Registered Office</FooterHeading>
             <address className="text-[15px] leading-relaxed text-text-muted not-italic">
-              {SITE.address.lines.map((line) => (
-                <span key={line} className="block">
-                  {line}
-                </span>
-              ))}
+              {LEGAL.registeredOffice ?? SITE.address.single}
             </address>
           </section>
 

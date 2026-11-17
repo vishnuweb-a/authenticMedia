@@ -66,5 +66,10 @@ export const LEGAL: {
     { name: 'Aliya Khan', designation: 'Director' },
     { name: 'Afsheen Khan', designation: 'Director' },
   ],
-  grievanceOfficer: null,
+  grievanceOfficer: {
+    name: 'Aliya Khan',
+    designation: 'Director',
+    email: SITE.email,
+    phone: SITE.phone,
+  },
 }

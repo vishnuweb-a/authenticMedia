@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Section, SectionHeading } from '@/components/layout'
 import { Card, GradientText } from '@/components/ui'
 import { InlineText } from '@/features/legal/components/policy-text'
-import { SITE } from '@/lib/site'
+import { LEGAL, SITE } from '@/lib/site'
 import { ROUTES } from '@/routes/paths'
 import { ABOUT_OPERATIONS } from '../data/about.data'
 
@@ -62,7 +62,7 @@ export function ContactOfficeSection() {
             <span>
               {SITE.legalName}
               <br />
-              {SITE.address.single}
+              {LEGAL.registeredOffice ?? SITE.address.single}
             </span>
           </address>
         </div>

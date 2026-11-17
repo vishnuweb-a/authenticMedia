@@ -30,7 +30,7 @@ export function refFromGatewayPost(config: IsgpayConfig, form: Record<string, st
   const encData = form['EncData']?.replace(/ /g, '+')
   if (!encData) return { ok: false, reason: 'missing_encdata' }
   const opened = openGatewayResponse(config, encData)
-  if (!opened.ok) return { ok: false, reason: opened.reason }
+  if (opened.ok === false) return { ok: false, reason: opened.reason }
   const ref = opened.fields['TxnRefNo']
   return ref ? { ok: true, txnRefNo: ref } : { ok: false, reason: 'missing_txn_ref' }
 }

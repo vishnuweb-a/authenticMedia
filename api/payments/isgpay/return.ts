@@ -35,7 +35,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   }
 
   const ref = refFromGatewayPost(config, await readForm(req))
-  if (!ref.ok) {
+  if (ref.ok === false) {
     logEvent('isgpay.return.unreadable', { reason: ref.reason })
     sendPage(res, 400, 'Response could not be verified', `<p>The gateway response could not be verified (${esc(ref.reason)}). Nothing was settled.</p>`)
     return

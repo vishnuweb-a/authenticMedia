@@ -199,7 +199,8 @@ export function parseStatusBody(config: IsgpayConfig, body: string): StatusResul
   const envelope = fields['EncData'] !== undefined && fields['ResponseCode'] === undefined
     ? openEnvelope(fields['EncData'], config.secrets)
     : verifyFields(fields, config.secrets.secureSecret)
-  return envelope.ok ? { kind: 'verified', fields: envelope.fields } : { kind: 'inconclusive', reason: envelope.reason }
+  if (envelope.ok === false) return { kind: 'inconclusive', reason: envelope.reason }
+  return { kind: 'verified', fields: envelope.fields }
 }
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>

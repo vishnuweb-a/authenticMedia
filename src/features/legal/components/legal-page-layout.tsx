@@ -14,6 +14,7 @@ function CompanyContactDetails() {
       <p className="font-bold text-text">{SITE.legalName}</p>
       {LEGAL.cin && <p>CIN: {LEGAL.cin}</p>}
       {LEGAL.gstin && <p>GSTIN: {LEGAL.gstin}</p>}
+      {LEGAL.registeredOffice && <p>Registered office: {LEGAL.registeredOffice}</p>}
       <p className="flex gap-2">
         <MapPin aria-hidden="true" className="mt-1 size-4 shrink-0 text-primary-mid" />
         {SITE.address.single}

@@ -28,7 +28,7 @@ export interface Director {
   name: string
   designation: string
   /** Verified professional background only — leave out anything unconfirmed. */
-  background: string
+  background?: string
   /** Director Identification Number, if the company chooses to publish it. */
   din?: string
 }
@@ -53,11 +53,18 @@ export interface GrievanceOfficer {
 export const LEGAL: {
   cin: string | null
   gstin: string | null
+  /** Registered office per MCA records; the operating address is SITE.address. */
+  registeredOffice: string | null
   directors: readonly Director[]
   grievanceOfficer: GrievanceOfficer | null
 } = {
-  cin: null,
-  gstin: null,
-  directors: [],
+  cin: 'U73100DL2024PTC432840',
+  gstin: '09ABACA8829R1ZU',
+  registeredOffice:
+    'Shop No. S-5, S/F, Plot No. 2, LSC-1, Manish Global Mall, District Court Complex, Dwarka, South West Delhi, Delhi – 110075, India',
+  directors: [
+    { name: 'Aliya Khan', designation: 'Director' },
+    { name: 'Afsheen Khan', designation: 'Director' },
+  ],
   grievanceOfficer: null,
 }

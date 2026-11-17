@@ -40,6 +40,8 @@ export function CompanyInfoSection() {
     },
     ...(LEGAL.cin ? [{ label: 'CIN', value: LEGAL.cin }] : []),
     ...(LEGAL.gstin ? [{ label: 'GSTIN', value: LEGAL.gstin }] : []),
+    ...(LEGAL.registeredOffice ? [{ label: 'Registered office', value: LEGAL.registeredOffice }] : []),
+    { label: 'Business address (books of account)', value: SITE.address.single },
   ]
 
   return (
@@ -77,7 +79,9 @@ export function CompanyInfoSection() {
                     {director.designation}
                     {director.din && ` · DIN ${director.din}`}
                   </p>
-                  <p className="mt-3 text-[15px] text-text-muted">{director.background}</p>
+                  {director.background && (
+                    <p className="mt-3 text-[15px] text-text-muted">{director.background}</p>
+                  )}
                 </Card>
               </li>
             ))}

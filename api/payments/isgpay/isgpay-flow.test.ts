@@ -74,6 +74,7 @@ beforeEach(() => {
   db.rpc.length = 0
   delete process.env['VERCEL_ENV']
   delete process.env['ISGPAY_UAT_ACCESS_KEY']
+  delete process.env['ISGPAY_UAT_WEBSITE_TEST_ENABLED']
 })
 
 describe('settleIsgpayOrder', () => {
@@ -129,6 +130,22 @@ describe('UAT checkout', () => {
     const b = mockRes()
     await uat(req({ method: 'GET' }), b.res)
     expect(b.out.code).toBe(404)
+  })
+
+  it('allows production UAT page only with the separate site-test flag and access key', async () => {
+    process.env['VERCEL_ENV'] = 'production'
+    process.env['ISGPAY_UAT_ACCESS_KEY'] = 'k'.repeat(32)
+
+    const blocked = mockRes()
+    await uat(req({ method: 'GET' }), blocked.res)
+    expect(blocked.out.code).toBe(404)
+
+    process.env['ISGPAY_UAT_WEBSITE_TEST_ENABLED'] = 'true'
+    const allowed = mockRes()
+    await uat(req({ method: 'GET' }), allowed.res)
+    expect(allowed.out.code).toBe(200)
+    expect(String(allowed.out.body)).toContain('ISGPay UAT checkout')
+    expect(db.rpc).toHaveLength(0)
   })
 
   it('rejects a wrong key and creates nothing', async () => {

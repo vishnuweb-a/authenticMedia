@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 
-import { fetchOrderStatus, type OrderPaymentState } from '@/services'
+import {
+  fetchIsgpayOrderStatus,
+  fetchOrderStatus,
+  ISGPAY_REF_RE,
+  type OrderPaymentState,
+} from '@/services'
 
 /**
  * Polls the authoritative order-status endpoint (AIPAY-DOCS §15.1).
@@ -20,6 +25,8 @@ const MAX_ATTEMPTS = 20 // ~60 s
 export interface UseOrderStatusResult {
   readonly state: OrderPaymentState
   readonly amount: number
+  /** Sandbox (ISGPay UAT) order — shown as a test, never as a purchase. */
+  readonly testMode: boolean
 }
 
 function wait(ms: number): Promise<void> {
@@ -32,18 +39,21 @@ export function useOrderStatus(
 ): UseOrderStatusResult {
   const [state, setState] = useState<OrderPaymentState>('checking')
   const [amount, setAmount] = useState(0)
+  // From the reference format alone, so the sandbox label shows from the first render.
+  const testMode = orderRef !== null && ISGPAY_REF_RE.test(orderRef)
 
   useEffect(() => {
     if (!orderRef || !accessToken) return
 
     let cancelled = false
+    const fetchStatus = ISGPAY_REF_RE.test(orderRef) ? fetchIsgpayOrderStatus : fetchOrderStatus
 
     // The polling loop is an external system this effect synchronises with;
     // every state update below happens after an await, never synchronously
     // during the effect.
     async function run(): Promise<void> {
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-        const result = await fetchOrderStatus(orderRef as string, accessToken as string).catch(
+        const result = await fetchStatus(orderRef as string, accessToken as string).catch(
           () => null,
         )
 
@@ -77,5 +87,5 @@ export function useOrderStatus(
     }
   }, [orderRef, accessToken])
 
-  return { state, amount }
+  return { state, amount, testMode }
 }

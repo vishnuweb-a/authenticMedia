@@ -22,7 +22,17 @@ vi.mock('../../_lib/db.js', () => ({
   }),
 }))
 
+const airpaySettle = vi.hoisted(() => ({ calls: [] as string[] }))
+vi.mock('../../_lib/settle.js', () => ({
+  isSettledOutcome: (s: string) => ['paid', 'failed', 'cancelled', 'delivered', 'requires_review'].includes(s),
+  settleOrder: async ({ orderRef }: { orderRef: string }) => {
+    airpaySettle.calls.push(orderRef)
+    return { outcome: 'paid', orderRef, paymentStatus: 'paid' }
+  },
+}))
+
 const { settleIsgpayOrder } = await import('../../_lib/isgpay-settle.js')
+const airpayOrderStatus = (await import('../../orders/status.js')).default
 const uat = (await import('./uat.js')).default
 const ret = (await import('./return.js')).default
 const callback = (await import('./callback.js')).default
@@ -173,11 +183,34 @@ describe('UAT checkout', () => {
 })
 
 describe('return / callback', () => {
-  it('unverifiable envelope settles nothing', async () => {
+  it('unverifiable envelope settles nothing and lands on an unverified page', async () => {
     const { res, out } = mockRes()
     await ret(req({ method: 'POST', body: { EncData: 'bm90LXZhbGlk' } }), res)
-    expect(out.code).toBe(400)
+    expect(out.code).toBe(303)
+    expect(out.headers['Location']).toBe('/order-success?status=unverified')
     expect(db.rpc).toHaveLength(0)
+  })
+
+  it('verified return → status query, then /order-success with the server-held token', async () => {
+    const config = loadIsgpayConfig()
+    db.orders.set(REF, order())
+    // The gateway is unreachable: the envelope's "00" must NOT settle anything.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'))
+    const { res, out } = mockRes()
+    await ret(req({ method: 'POST', body: { EncData: envelope(config) } }), res)
+    expect(fetchSpy).toHaveBeenCalledTimes(1) // the Sale Status Query
+    fetchSpy.mockRestore()
+    expect(out.code).toBe(303)
+    expect(out.headers['Location']).toBe(`/order-success?ref=${REF}&t=tok-uuid`)
+    expect(db.rpc.filter((c) => c.fn === 'settle_isgpay_order')).toHaveLength(0)
+  })
+
+  it('never hands out the token of a non-ISGPay order', async () => {
+    const config = loadIsgpayConfig()
+    db.orders.set(REF, order({ paymentMethod: 'airpay' }))
+    const { res, out } = mockRes()
+    await ret(req({ method: 'POST', body: { EncData: envelope(config) } }), res)
+    expect(out.headers['Location']).toBe(`/order-success?ref=${REF}&status=unknown`)
   })
 
   it('a callback claiming success does not settle without a status query', async () => {
@@ -204,6 +237,24 @@ describe('status endpoint', () => {
     const b = mockRes()
     await status(req({ method: 'GET', query: { ref: REF, t: 'tok-uuid' } }), b.res)
     expect(b.out.code).toBe(404)
+  })
+})
+
+describe('sandbox isolation', () => {
+  it('the Airpay status/settlement path never touches an ISGPay (test) order', async () => {
+    airpaySettle.calls.length = 0
+    db.orders.set(REF, order())
+    const { res, out } = mockRes()
+    await airpayOrderStatus(req({ method: 'GET', query: { ref: REF, t: 'tok-uuid' } }), res)
+    expect(airpaySettle.calls).toHaveLength(0)
+    expect((out.body as { status: string }).status).toBe('pending_payment')
+  })
+
+  it('ISGPay status always flags its orders as test mode', async () => {
+    db.orders.set(REF, order({ status: 'paid' }))
+    const { res, out } = mockRes()
+    await status(req({ method: 'GET', query: { ref: REF, t: 'tok-uuid' } }), res)
+    expect(out.body).toMatchObject({ status: 'paid', testMode: true })
   })
 })
 

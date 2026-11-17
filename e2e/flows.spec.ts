@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
 import { ALL_SERVICES } from '../src/features/services/data/catalogue.data'
-import { installMocks, MOCK_GATEWAY } from './support/mocks'
+import { E2E_ISG_REF, installMocks, ISGPAY_SANDBOX, MOCK_GATEWAY } from './support/mocks'
 
 async function shot(page: Page, project: string, name: string) {
   await page.screenshot({ path: `test-results/screenshots/${project}/${name}.png` })
@@ -156,6 +156,96 @@ test.describe('guest checkout', () => {
     ])
     await terms.waitForLoadState()
     expect(new URL(terms.url()).pathname).toBe('/terms')
+  })
+})
+
+// MOCKED server and sandbox: proves the drawer's behaviour, never a real charge.
+test.describe('ISGPay sandbox checkout', () => {
+  test('hidden when sandbox testing is not offered', async ({ page }) => {
+    await installMocks(page)
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    const drawer = await openCart(page)
+    await expect(drawer.getByRole('radio')).toHaveCount(2)
+    await expect(drawer.getByText(/ISGPay/)).toHaveCount(0)
+  })
+
+  test('select ISGPay → one server-priced order → automatic POST to the sandbox', async ({ page }, info) => {
+    const log = await installMocks(page, { isgpay: true })
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    await page.getByRole('button', { name: 'Add Website Health Check to cart' }).click()
+    const drawer = await openCart(page)
+
+    const radios = drawer.getByRole('radio')
+    await expect(radios).toHaveCount(3)
+    await expect(radios.nth(0)).toBeChecked() // Airpay merchant 1 stays the default
+
+    await drawer.getByLabel('Name (optional)').fill('Test Customer')
+    await drawer.getByLabel('Email').fill('test@example.com')
+    await drawer.getByLabel('Phone').fill('9999999999')
+
+    await drawer.locator('label:has(input[type=radio][value="isgpay"])').click()
+    await expect(drawer.getByRole('radio', { name: /ISGPay — Sandbox Test/ })).toBeChecked()
+    await expect(radios.nth(0)).not.toBeChecked()
+    await expect(radios.nth(1)).not.toBeChecked()
+    await expect(drawer.getByText('Sandbox test', { exact: true })).toBeVisible()
+
+    // Switching gateways keeps the basket and the contact details.
+    await drawer.locator('label:has(input[type=radio][value="2"])').click()
+    await drawer.locator('label:has(input[type=radio][value="isgpay"])').click()
+    await expect(drawer.getByLabel('Email')).toHaveValue('test@example.com')
+    await expect(drawer.getByText('Website Health Check')).toBeVisible()
+
+    await drawer.getByRole('checkbox').check()
+    await shot(page, info.project.name, 'checkout-isgpay-ready')
+    await drawer.getByRole('button', { name: /^Pay Now,/ }).dblclick()
+    await page.waitForURL(ISGPAY_SANDBOX)
+
+    expect(log.createPaymentBodies).toHaveLength(0) // Airpay never reached
+    expect(log.isgpayCreateBodies).toHaveLength(1) // double-click → one order
+    const body = log.isgpayCreateBodies[0] ?? {}
+    expect(body.serviceSlugs).toEqual(['tech-maintenance', 'website-health-check'])
+    expect(Object.keys(body).sort()).toEqual(['contact', 'guestToken', 'serviceSlugs'])
+    expect(log.isgpaySandboxPosts).toHaveLength(1)
+    expect(new URLSearchParams(log.isgpaySandboxPosts[0]).get('EncData')).toBe('e2e-sealed')
+  })
+
+  test('a server amount that differs from the cart total stops before the sandbox', async ({ page }) => {
+    const log = await installMocks(page, { isgpay: true, chargedAmount: 1 })
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    const drawer = await openCart(page)
+    await drawer.locator('label:has(input[type=radio][value="isgpay"])').click()
+    await drawer.getByLabel('Email').fill('test@example.com')
+    await drawer.getByRole('checkbox').check()
+    await drawer.getByRole('button', { name: /^Pay Now,/ }).click()
+    await expect(drawer.getByRole('button', { name: /^Try Again,/ })).toBeVisible()
+    expect(log.isgpaySandboxPosts).toHaveLength(0)
+  })
+
+  test('verified sandbox payment is shown as a test, never as a purchase', async ({ page }, info) => {
+    await installMocks(page)
+    await page.goto(`/order-success?ref=${E2E_ISG_REF}&t=e2e-isg-token`)
+    await expect(page.getByRole('heading', { level: 1, name: 'Sandbox test payment verified' })).toBeVisible()
+    await expect(page.getByText(/not a real purchase/)).toBeVisible()
+    await expect(page.getByText('Payment confirmed')).toHaveCount(0)
+    await shot(page, info.project.name, 'order-isgpay-paid')
+    expect(await seriousAxe(page, 'main')).toEqual([])
+  })
+
+  test('a verified decline is shown as not approved', async ({ page }) => {
+    await installMocks(page, {
+      isgpayStatus: { status: 'pending_payment', settled: false, verification: { outcome: 'declined_pending' } },
+    })
+    await page.goto(`/order-success?ref=${E2E_ISG_REF}&t=e2e-isg-token`)
+    await expect(page.getByRole('heading', { level: 1, name: 'Payment not approved' })).toBeVisible()
+  })
+
+  test('an unverifiable gateway return claims nothing', async ({ page }) => {
+    await installMocks(page)
+    await page.goto('/order-success?status=unverified')
+    await expect(page.getByRole('heading', { level: 1, name: 'We could not verify the gateway response' })).toBeVisible()
   })
 })
 

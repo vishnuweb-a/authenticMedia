@@ -4,9 +4,12 @@ import { Button } from '@/components/ui'
 import { formatInr } from '@/lib/format'
 import { AirpayMark } from './airpay-mark'
 import { CheckoutPolicyConsent } from './checkout-policy-consent'
-import type { CheckoutStatus } from '../types/cart.types'
+import { IsgpayMark } from './isgpay-mark'
+import type { CheckoutGateway, CheckoutStatus } from '../types/cart.types'
 
 export interface CartSummaryProps {
+  /** Which gateway's mark to show. Defaults to Airpay. */
+  gateway?: CheckoutGateway['kind']
   total: number
   status: CheckoutStatus
   error: string | null
@@ -25,6 +28,7 @@ export interface CartSummaryProps {
  * cart state; nothing here is hardcoded.
  */
 export function CartSummary({
+  gateway = 'airpay',
   total,
   status,
   error,
@@ -63,7 +67,7 @@ export function CartSummary({
       />
 
       <div className="mt-[22px] flex h-[71px] items-center justify-between gap-4 rounded-2xl border border-border-drawer bg-surface-drawer-panel px-5">
-        <AirpayMark />
+        {gateway === 'isgpay' ? <IsgpayMark /> : <AirpayMark />}
 
         {/* Button hides its label while loading so the pill keeps its width,
             which would leave this control announced only as "Loading". An

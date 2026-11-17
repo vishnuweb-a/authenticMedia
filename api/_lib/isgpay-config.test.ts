@@ -123,3 +123,17 @@ describe('ISGPay configuration', () => {
     }
   })
 })
+
+describe('return / callback URLs carry no token', () => {
+  it('rejects a query string (e.g. a Vercel protection bypass) or fragment', () => {
+    for (const name of ['ISGPAY_RETURN_URL', 'ISGPAY_CALLBACK_URL']) {
+      const original = process.env[name]
+      for (const suffix of ['?x-vercel-protection-bypass=abc', '#frag']) {
+        process.env[name] = `https://authenticmedia.fun/api/payments/isgpay/${name.includes('RETURN') ? 'return' : 'callback'}${suffix}`
+        expect(() => loadIsgpayConfig()).toThrow(ConfigError)
+      }
+      process.env[name] = original
+    }
+    expect(() => loadIsgpayConfig()).not.toThrow()
+  })
+})

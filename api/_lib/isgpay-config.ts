@@ -145,6 +145,8 @@ function ownUrl(name: string, isRequired: boolean): string | undefined {
   if (!approvedReturnHosts().includes(url.hostname) || url.port || url.username || url.password) {
     throw new ConfigError(`${name} must point at an approved Authentic Media host`)
   }
+  // No query/fragment: keeps tokens (e.g. a Vercel protection bypass) out of gateway-held URLs.
+  if (url.search || url.hash) throw new ConfigError(`${name} must not carry a query string or fragment`)
   if (url.pathname.startsWith(AIRPAY_CALLBACK_PATH)) {
     throw new ConfigError(`${name} must not point at the Airpay callback`)
   }

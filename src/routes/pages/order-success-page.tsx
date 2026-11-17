@@ -22,9 +22,18 @@ export function OrderSuccessPage() {
   const orderRef = params.get('ref')
   const token = params.get('t')
 
-  const { state, amount } = useOrderStatus(orderRef, token)
+  const { state, amount, testMode } = useOrderStatus(orderRef, token)
 
   if (!orderRef || !token) {
+    if (params.get('status') === 'unverified') {
+      return (
+        <Outcome
+          icon={<AlertCircle aria-hidden="true" className="size-10 text-amber-600" />}
+          title="We could not verify the gateway response"
+          body="The payment gateway's reply could not be verified, so nothing has been recorded against it. If you were charged, contact us and we will check it with the gateway."
+        />
+      )
+    }
     return (
       <Outcome
         icon={<SearchX aria-hidden="true" className="size-10 text-text-muted" />}
@@ -33,6 +42,11 @@ export function OrderSuccessPage() {
       />
     )
   }
+
+  // ISGPay UAT: say so on every state, so a test can never read as a purchase.
+  const note = testMode
+    ? 'ISGPay sandbox test transaction — not a real purchase. No real money moves and no service is delivered.'
+    : undefined
 
   switch (state) {
     case 'checking':
@@ -44,17 +58,38 @@ export function OrderSuccessPage() {
           title="Confirming your payment"
           body="We are checking with the payment gateway. This usually takes a few seconds — please do not close this page."
           reference={orderRef}
+          note={note}
           busy
         />
       )
 
     case 'paid':
-      return (
+      return testMode ? (
+        <Outcome
+          icon={<CheckCircle2 aria-hidden="true" className="size-10 text-emerald-600" />}
+          title="Sandbox test payment verified"
+          body={`The ISGPay sandbox confirmed this test payment${amount > 0 ? ` of ${formatInr(amount)}` : ''} with a server-side status check.`}
+          reference={orderRef}
+          note={note}
+        />
+      ) : (
         <Outcome
           icon={<CheckCircle2 aria-hidden="true" className="size-10 text-emerald-600" />}
           title="Payment confirmed"
           body={`We have received ${amount > 0 ? formatInr(amount) : 'your payment'}. Our team will contact you using the details you gave at checkout to get started.`}
           reference={orderRef}
+          note={note}
+        />
+      )
+
+    case 'declined':
+      return (
+        <Outcome
+          icon={<AlertCircle aria-hidden="true" className="size-10 text-red-600" />}
+          title="Payment not approved"
+          body="The gateway reports that this payment was declined or cancelled. You can try again from your cart. If your account was debited, contact us with your order reference."
+          reference={orderRef}
+          note={note}
         />
       )
 
@@ -65,6 +100,7 @@ export function OrderSuccessPage() {
           title="That payment did not go through"
           body="We could not confirm this payment. If your account was debited, your bank normally reverses it automatically; please check your statement and contact us with your order reference if the amount is not returned. You can also try again from your cart. See our Refund & Cancellation Policy for details."
           reference={orderRef}
+          note={note}
         />
       )
 
@@ -75,6 +111,7 @@ export function OrderSuccessPage() {
           title="Your payment needs a quick check"
           body="We have received a payment but the amount did not match your order, so our team is reviewing it manually. We will contact you shortly — please do not pay again."
           reference={orderRef}
+          note={note}
         />
       )
 
@@ -87,6 +124,7 @@ export function OrderSuccessPage() {
           title="Still confirming your payment"
           body="This is taking longer than usual. Your payment may still complete — please do not pay again. Refresh this page in a few minutes, or contact us with your order reference."
           reference={orderRef}
+          note={note}
         />
       )
 
@@ -97,6 +135,7 @@ export function OrderSuccessPage() {
           title="We could not find that order"
           body="This link may have expired or been mistyped. Contact us with your order reference and we will look it up."
           reference={orderRef}
+          note={note}
         />
       )
   }
@@ -107,10 +146,12 @@ interface OutcomeProps {
   title: string
   body: string
   reference?: string
+  /** Sandbox notice, shown above the heading. */
+  note?: string | undefined
   busy?: boolean
 }
 
-function Outcome({ icon, title, body, reference, busy }: OutcomeProps) {
+function Outcome({ icon, title, body, reference, note, busy }: OutcomeProps) {
   return (
     <Section>
       <Container>
@@ -120,6 +161,11 @@ function Outcome({ icon, title, body, reference, busy }: OutcomeProps) {
           aria-live="polite"
           aria-busy={busy ? 'true' : undefined}
         >
+          {note && (
+            <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-[13px] font-semibold text-amber-800">
+              {note}
+            </p>
+          )}
           {icon}
           <h1 className="text-2xl font-bold text-text sm:text-3xl">{title}</h1>
           <p className="text-[15px] leading-relaxed text-text-muted">{body}</p>

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import { getServiceClient } from '../../_lib/db.js'
 import { safeEqual, type ApiRequest, type ApiResponse } from '../../_lib/http.js'
+import { uatAccessKey as accessKey } from '../../_lib/isgpay-checkout.js'
 import { loadIsgpayConfig } from '../../_lib/isgpay-config.js'
 import { esc, readForm, sendPage } from '../../_lib/isgpay-http.js'
 import { buildSaleRequest, generateTxnRefNo, inrToPaise } from '../../_lib/isgpay.js'
@@ -18,11 +19,6 @@ import { logEvent } from '../../_lib/log.js'
 
 const DEFAULT_SLUG = 'website-security-audit'
 const SLUG_RE = /^[a-z0-9-]{1,80}$/
-
-function accessKey(): string | null {
-  const key = process.env['ISGPAY_UAT_ACCESS_KEY']?.trim() ?? ''
-  return key.length >= 24 ? key : null
-}
 
 const FORM = `<form method="post">
 <label for="key">UAT access key</label><input id="key" name="key" type="password" autocomplete="off" required>

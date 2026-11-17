@@ -31,8 +31,9 @@ export function CartDrawer() {
     contact,
     contactErrors,
     setContactValue,
-    merchant,
-    setMerchant,
+    gateway,
+    setGateway,
+    isgpayAvailable,
     termsAccepted,
     setTermsAccepted,
     termsError,
@@ -112,38 +113,16 @@ export function CartDrawer() {
                 ))}
               </ul>
 
-              {/* Exactly one of the two Airpay merchants takes this payment,
-                  and the shopper chooses which (§2.4). The choice travels to
-                  the server as an index; no MID or credential is in the
-                  browser to choose from. */}
+              {/* Exactly one gateway takes this payment, and the shopper
+                  chooses which (§2.4): an Airpay merchant index, or the ISGPay
+                  sandbox when the server offers it to this browser. No MID or
+                  credential is in the browser to choose from. */}
               <CheckoutMerchantChoice
-                value={merchant}
+                value={gateway}
+                isgpayAvailable={isgpayAvailable}
                 disabled={status === 'pending'}
-                onChange={setMerchant}
+                onChange={setGateway}
               />
-
-              {/* Hidden from ordinary shoppers. The server requires a secret
-                  tester access key and independently blocks UAT in production
-                  unless ISGPAY_UAT_WEBSITE_TEST_ENABLED=true. */}
-              {typeof window !== 'undefined' &&
-                new URLSearchParams(window.location.search).get('isgpay-uat') === '1' && (
-                  <section className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4">
-                    <p className="text-sm font-semibold text-text">
-                      ISGPay — Sandbox Test
-                    </p>
-                    <p className="mt-1 text-xs text-text-muted">
-                      Tester access only. This is not a live payment option; test orders use ISGPay UAT.
-                    </p>
-                    <a
-                      href="/api/payments/isgpay/uat"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-block rounded-lg border border-border-drawer px-3 py-2 text-sm font-semibold text-text underline underline-offset-2 focus-visible:outline focus-visible:outline-2"
-                    >
-                      Open ISGPay sandbox checkout
-                    </a>
-                  </section>
-                )}
 
               {/* Airpay refuses a payment with neither an email nor a phone
                   number, so one is collected before the handoff (§7.3). */}
@@ -162,6 +141,7 @@ export function CartDrawer() {
             shopper ends up paying twice. */}
         {itemCount > 0 && !awaiting && (
           <CartSummary
+            gateway={gateway.kind}
             total={total}
             status={status}
             error={error}

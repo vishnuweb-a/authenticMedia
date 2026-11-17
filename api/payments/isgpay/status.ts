@@ -57,5 +57,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     createdAt: order.createdAt,
     verification: result ? { outcome: result.outcome, reason: result.reason, gateway: result.gateway } : null,
     settled: ['paid', 'failed', 'cancelled', 'delivered', 'requires_review'].includes(status),
+    // Every ISGPay order is UAT (loadIsgpayConfig accepts only ISGPAY_ENV=uat).
+    testMode: true,
   })
 }

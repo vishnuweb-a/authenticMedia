@@ -44,12 +44,19 @@ export type OrderPaymentState =
   | 'requires-review'
   | 'unresolved'
   | 'not-found'
+  /**
+   * ISGPay only: the gateway answered with a verified non-approval. Display
+   * state — the order is NOT marked failed (decline policy is fail-closed).
+   */
+  | 'declined'
 
 export interface OrderStatusResult {
   readonly orderRef: string
   readonly state: OrderPaymentState
   readonly amount: number
   readonly settled: boolean
+  /** True for sandbox (ISGPay UAT) orders: never a real purchase. */
+  readonly testMode?: boolean
 }
 
 const UNAVAILABLE = 'Payments are unavailable right now. Please try again shortly.'
@@ -142,8 +149,9 @@ export async function createAirpayPayment(
  * for merchant 1 — whose dashboard Response URL points back at this site, so
  * Airpay itself brings the shopper home to /order-success (§8.1, §14.3).
  */
-export function submitToAirpay(
-  handoff: AirpayHandoff,
+export function submitToAirpay<H extends Pick<AirpayHandoff, 'actionUrl' | 'fields'>>(
+  // Only the form target and fields are read; ISGPay's hand-off reuses this POST.
+  handoff: H,
   doc: Document = document,
   target?: string,
 ): void {

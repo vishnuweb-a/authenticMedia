@@ -21,6 +21,15 @@ export type {
   OrderPaymentState,
   OrderStatusResult,
 } from './airpay-adapter'
+export {
+  createIsgpayPayment,
+  fetchIsgpayAvailability,
+  fetchIsgpayOrderStatus,
+  ISGPAY_REF_RE,
+  ISGPAY_SANDBOX_URL,
+  submitToIsgpay,
+} from './isgpay-adapter'
+export type { CreateIsgpayPaymentInput, IsgpayHandoff } from './isgpay-adapter'
 
 /**
  * The active payment implementation.

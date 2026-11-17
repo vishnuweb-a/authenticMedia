@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import { CheckoutMerchantChoice } from './checkout-merchant-choice'
+import type { CheckoutGateway } from '../types/cart.types'
+
+const airpay = (merchant: 1 | 2): CheckoutGateway => ({ kind: 'airpay', merchant })
 
 /**
  * The checkout merchant selector (AIPAY-DOCS §2.4).
@@ -27,7 +30,7 @@ function render(
   props: Partial<React.ComponentProps<typeof CheckoutMerchantChoice>> = {},
 ): string {
   return renderToStaticMarkup(
-    <CheckoutMerchantChoice value={1} onChange={() => {}} {...props} />,
+    <CheckoutMerchantChoice value={airpay(1)} onChange={() => {}} {...props} />,
   )
 }
 
@@ -79,20 +82,20 @@ describe('23. the checkout renders exactly two merchant options', () => {
 
 describe('24. the default selection is deterministic', () => {
   it('checks merchant 1 — the production-proven account — when value is 1', () => {
-    const checked = radios(render({ value: 1 })).filter((tag) => tag.includes('checked'))
+    const checked = radios(render({ value: airpay(1) })).filter((tag) => tag.includes('checked'))
     expect(checked).toHaveLength(1)
     expect(attr(checked[0] as string, 'value')).toBe('1')
   })
 
   it('checks merchant 2 only when the shopper has actually chosen it', () => {
-    const checked = radios(render({ value: 2 })).filter((tag) => tag.includes('checked'))
+    const checked = radios(render({ value: airpay(2) })).filter((tag) => tag.includes('checked'))
     expect(checked).toHaveLength(1)
     expect(attr(checked[0] as string, 'value')).toBe('2')
   })
 
   it('never renders zero or two checked radios — one is always selected', () => {
     for (const value of [1, 2] as const) {
-      const checked = radios(render({ value })).filter((tag) => tag.includes('checked'))
+      const checked = radios(render({ value: airpay(value) })).filter((tag) => tag.includes('checked'))
       expect(checked).toHaveLength(1)
     }
   })
@@ -100,7 +103,7 @@ describe('24. the default selection is deterministic', () => {
   it('reports the chosen index — and only an index — to its caller', () => {
     const onChange = vi.fn()
     // The component's contract: it hands back 1 or 2, never a MID or a config.
-    render({ value: 1, onChange })
+    render({ value: airpay(1), onChange })
     expect(onChange).not.toHaveBeenCalled()
   })
 })
@@ -115,9 +118,42 @@ describe('25. selection is disabled while a payment is being created', () => {
   })
 })
 
+describe('ISGPay sandbox option', () => {
+  it('is absent unless the server offers it (testing disabled → two options)', () => {
+    const markup = render({ isgpayAvailable: false })
+    expect(radios(markup)).toHaveLength(2)
+    expect(markup).not.toContain('ISGPay')
+  })
+
+  it('renders three options in ONE group when sandbox testing is enabled', () => {
+    const tags = radios(render({ isgpayAvailable: true }))
+    expect(tags.map((t) => attr(t, 'value'))).toEqual(['1', '2', 'isgpay'])
+    expect(new Set(tags.map((t) => attr(t, 'name'))).size).toBe(1)
+  })
+
+  it('keeps Airpay merchant 1 the default even when ISGPay is offered', () => {
+    const checked = radios(render({ isgpayAvailable: true })).filter((t) => t.includes('checked'))
+    expect(checked.map((t) => attr(t, 'value'))).toEqual(['1'])
+  })
+
+  it('selecting ISGPay checks ISGPay alone — no Airpay merchant is selected', () => {
+    const checked = radios(render({ isgpayAvailable: true, value: { kind: 'isgpay' } })).filter((t) =>
+      t.includes('checked'),
+    )
+    expect(checked.map((t) => attr(t, 'value'))).toEqual(['isgpay'])
+  })
+
+  it('is clearly labelled as a sandbox test, and leaks no gateway detail', () => {
+    const markup = render({ isgpayAvailable: true })
+    expect(markup).toContain('Pay with ISGPay — Sandbox Test')
+    expect(markup).toMatch(/No real money moves/)
+    expect(markup.toLowerCase()).not.toMatch(/sandbox\.isgpay\.com|encdata|merchantid|passcode/)
+  })
+})
+
 describe('the browser is told nothing it should not know', () => {
   it('leaks no MID, credential, gateway URL or internal detail', () => {
-    const markup = render({ value: 2 }).toLowerCase()
+    const markup = render({ value: airpay(2) }).toLowerCase()
 
     // The real MIDs, which belong to the server's environment alone.
     expect(markup).not.toContain('368250')

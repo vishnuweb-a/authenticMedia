@@ -334,9 +334,9 @@ test.describe('navigation', () => {
       }
     }
     expect(broken).toEqual([])
-    // Every linked route (incl. /login and /register), excluding the unlinked
+    // Every route linked while signed in (the crawl is members-only; the auth pages redirect), excluding the unlinked
     // /order-success and /account (and the hidden /forgot-password), plus one page per service.
-    expect(seen.size).toBe(13 + ALL_SERVICES.length)
+    expect(seen.size).toBe(12 + ALL_SERVICES.length)
   })
 
   test('mobile menu opens, navigates and marks the active page', async ({ page }) => {
@@ -441,14 +441,14 @@ test.describe('website navigation and catalogue browsing', () => {
 
 test.describe('accounts (custom /api/auth)', () => {
   test('signed-out visitors are sent from /account to login', async ({ page }) => {
-    await installMocks(page)
+    await installMocks(page, { signedIn: false })
     await page.goto('/account')
     await expect(page).toHaveURL(/\/login$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Welcome back' })).toBeVisible()
   })
 
   test('sign in, see and edit the account, log out', async ({ page }, info) => {
-    const log = await installMocks(page)
+    const log = await installMocks(page, { signedIn: false })
     await page.goto('/account')
     await expect(page).toHaveURL(/\/login$/)
 
@@ -480,14 +480,14 @@ test.describe('accounts (custom /api/auth)', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Log out' }).click()
-    await expect(page).toHaveURL(/\/$/)
+    await expect(page).toHaveURL(/\/login$/)
     await page.goto('/account')
     await expect(page).toHaveURL(/\/login$/)
     expect(log.unmocked).toEqual([])
   })
 
   test('register, land signed in on /account (unverified), log out', async ({ page }, info) => {
-    const log = await installMocks(page)
+    const log = await installMocks(page, { signedIn: false })
     await page.goto('/login')
     await page.getByRole('link', { name: 'Create an account' }).click()
     await expect(page).toHaveURL(/\/register$/)
@@ -520,7 +520,7 @@ test.describe('accounts (custom /api/auth)', () => {
     await expect(page.getByText('ravi@example.com')).toBeVisible()
 
     await page.getByRole('button', { name: 'Log out' }).click()
-    await expect(page).toHaveURL(/\/$/)
+    await expect(page).toHaveURL(/\/login$/)
     expect(log.unmocked).toEqual([])
   })
 
@@ -548,5 +548,15 @@ test.describe('accounts (custom /api/auth)', () => {
     expect(log.createPaymentBodies).toHaveLength(1)
     // Payment stays independent of the account: nothing about the user is sent.
     expect(JSON.stringify(log.createPaymentBodies[0])).not.toMatch(/e2e-user|asha@example\.com/)
+  })
+
+  test('signed-out visitors are sent to login; legal pages stay public', async ({ page }) => {
+    await installMocks(page, { signedIn: false })
+    for (const path of ['/', '/services', '/about', '/faq']) {
+      await page.goto(path)
+      await expect(page).toHaveURL(/\/login$/)
+    }
+    await page.goto('/privacy')
+    await expect(page).toHaveURL(/\/privacy$/)
   })
 })

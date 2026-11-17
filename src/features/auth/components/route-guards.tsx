@@ -20,12 +20,10 @@ function Pending() {
  * be private is enforced by the server / RLS, never by this component.
  */
 export function RequireAuth() {
-  const { user, isLoading, signedOut } = useAuth()
+  const { user, isLoading } = useAuth()
   const location = useLocation()
 
   if (isLoading) return <Pending />
-  // Signing out on a private page goes home (as the header does), not to login.
-  if (!user && signedOut) return <Navigate to={ROUTES.home} replace />
   if (!user) {
     return (
       <Navigate

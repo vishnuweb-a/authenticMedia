@@ -2,6 +2,7 @@ import { ChevronDown, Menu, Search, ShoppingCart, X } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 
+import { AccountMenu, MobileAccountLinks } from './account-menu'
 import { Container } from './container'
 import { Logo } from './logo'
 import { Badge, IconButton } from '@/components/ui'
@@ -70,6 +71,10 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <div className="mr-2 hidden sm:block">
+            <AccountMenu />
+          </div>
+
           <IconButton
             label="Search services"
             aria-expanded={isSearchOpen}
@@ -135,6 +140,8 @@ export function Header() {
                 </li>
               ))}
             </ul>
+
+            <MobileAccountLinks onNavigate={() => setIsNavOpen(false)} />
 
             <div className="mt-2 border-t border-border pt-4">
               <h2 className="px-2 text-[13px] font-bold tracking-[0.12em] text-primary-mid uppercase">

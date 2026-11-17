@@ -1,10 +1,7 @@
-import { mockAuthService } from './mock-auth-service'
+import { apiAuthService } from './api-auth-service'
 import type { AuthService } from './types'
 
-export type { AuthService, SignInInput } from './types'
+export type { AuthService, SignInInput, SignUpInput } from './types'
 
-/**
- * The active auth implementation. Swapping in Supabase later is a change to
- * this binding only — no component or hook needs to be touched.
- */
-export const authService: AuthService = mockAuthService
+/** The active auth implementation: custom server-side auth at /api/auth. */
+export const authService: AuthService = apiAuthService

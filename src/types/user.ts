@@ -1,14 +1,9 @@
-export type UserRole = 'CUSTOMER' | 'ADMIN'
-
+/** The signed-in user as returned by /api/auth/me. Never carries a hash or token. */
 export interface User {
   id: string
   name: string
   email: string
-  role: UserRole
-}
-
-export interface Session {
-  user: User
-  /** Epoch milliseconds. */
-  expiresAt: number
+  emailVerified: boolean
+  /** ISO timestamp of account creation. */
+  createdAt: string
 }

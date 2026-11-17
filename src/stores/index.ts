@@ -1,3 +1,6 @@
 export { CartProvider } from './cart-provider'
 export { useCart } from './use-cart'
 export type { CartContextValue } from './cart-context'
+export { AuthProvider } from './auth-provider'
+export { useAuth } from './use-auth'
+export type { AuthContextValue } from './auth-context'

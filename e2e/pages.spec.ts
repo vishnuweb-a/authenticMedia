@@ -20,6 +20,7 @@ const PAGES = [
   ['refund', '/refund'],
   ['service-delivery', '/service-delivery-policy'],
   ['order-paid', '/order-success?ref=AM-E2E-00000001&t=e2e-token'],
+  ['login', '/login'],
   ['not-found', '/does-not-exist'],
 ] as const
 

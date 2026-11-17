@@ -1,5 +1,5 @@
 export { authService } from './auth'
-export type { AuthService, SignInInput } from './auth'
+export type { AuthService, SignInInput, SignUpInput } from './auth'
 
 export { catalogueRepository } from './catalogue'
 export type { CatalogueRepository } from './catalogue'
@@ -20,16 +20,24 @@ export type {
 
 export {
   createAirpayPayment,
+  createIsgpayPayment,
+  fetchIsgpayAvailability,
+  fetchIsgpayOrderStatus,
   fetchOrderStatus,
+  ISGPAY_REF_RE,
+  ISGPAY_SANDBOX_URL,
   openPaymentWindow,
   PAYMENT_WINDOW_NAME,
   paymentService,
   submitToAirpay,
+  submitToIsgpay,
 } from './payment'
 export type {
   AirpayHandoff,
   AirpayMerchantChoice,
   CreateAirpayPaymentInput,
+  CreateIsgpayPaymentInput,
+  IsgpayHandoff,
   CreatePaymentInput,
   OrderPaymentState,
   OrderStatusResult,

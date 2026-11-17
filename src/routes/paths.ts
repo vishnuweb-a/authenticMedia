@@ -17,6 +17,10 @@ export const ROUTES = {
   faq: '/faq',
   policies: '/policies',
   orderSuccess: '/order-success',
+  login: '/login',
+  register: '/register',
+  forgotPassword: '/forgot-password',
+  account: '/account',
 } as const
 
 /** An individual service's detail page. The slug is the catalogue id. */

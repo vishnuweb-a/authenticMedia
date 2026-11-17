@@ -31,8 +31,9 @@ export function CartDrawer() {
     contact,
     contactErrors,
     setContactValue,
-    merchant,
-    setMerchant,
+    gateway,
+    setGateway,
+    isgpayAvailable,
     termsAccepted,
     setTermsAccepted,
     termsError,
@@ -112,14 +113,15 @@ export function CartDrawer() {
                 ))}
               </ul>
 
-              {/* Exactly one of the two Airpay merchants takes this payment,
-                  and the shopper chooses which (§2.4). The choice travels to
-                  the server as an index; no MID or credential is in the
-                  browser to choose from. */}
+              {/* Exactly one gateway takes this payment, and the shopper
+                  chooses which (§2.4): an Airpay merchant index, or the ISGPay
+                  sandbox when the server offers it to this browser. No MID or
+                  credential is in the browser to choose from. */}
               <CheckoutMerchantChoice
-                value={merchant}
+                value={gateway}
+                isgpayAvailable={isgpayAvailable}
                 disabled={status === 'pending'}
-                onChange={setMerchant}
+                onChange={setGateway}
               />
 
               {/* Airpay refuses a payment with neither an email nor a phone
@@ -139,6 +141,7 @@ export function CartDrawer() {
             shopper ends up paying twice. */}
         {itemCount > 0 && !awaiting && (
           <CartSummary
+            gateway={gateway.kind}
             total={total}
             status={status}
             error={error}

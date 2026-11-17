@@ -46,21 +46,28 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
   label: string
   error?: string
   hint?: string
+  /** Control rendered inside the right edge, e.g. a show/hide password button. */
+  endAdornment?: React.ReactNode
 }
 
-export function Input({ label, error, hint, className, ...props }: InputProps) {
+export function Input({ label, error, hint, className, endAdornment, ...props }: InputProps) {
   const id = useId()
 
   return (
     <FieldShell id={id} label={label} error={error} hint={hint}>
       {({ describedBy }) => (
-        <input
-          id={id}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={describedBy}
-          className={cn(FIELD_CLASSES, className)}
-          {...props}
-        />
+        <div className="relative">
+          <input
+            id={id}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
+            className={cn(FIELD_CLASSES, endAdornment && 'pr-12', className)}
+            {...props}
+          />
+          {endAdornment && (
+            <div className="absolute inset-y-0 right-1 flex items-center">{endAdornment}</div>
+          )}
+        </div>
       )}
     </FieldShell>
   )

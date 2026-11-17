@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
 import { ALL_SERVICES } from '../src/features/services/data/catalogue.data'
-import { installMocks, MOCK_GATEWAY } from './support/mocks'
+import { E2E_ACCOUNT, E2E_ISG_REF, installMocks, ISGPAY_SANDBOX, MOCK_GATEWAY } from './support/mocks'
 
 async function shot(page: Page, project: string, name: string) {
   await page.screenshot({ path: `test-results/screenshots/${project}/${name}.png` })
@@ -159,6 +159,96 @@ test.describe('guest checkout', () => {
   })
 })
 
+// MOCKED server and sandbox: proves the drawer's behaviour, never a real charge.
+test.describe('ISGPay sandbox checkout', () => {
+  test('hidden when sandbox testing is not offered', async ({ page }) => {
+    await installMocks(page)
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    const drawer = await openCart(page)
+    await expect(drawer.getByRole('radio')).toHaveCount(2)
+    await expect(drawer.getByText(/ISGPay/)).toHaveCount(0)
+  })
+
+  test('select ISGPay → one server-priced order → automatic POST to the sandbox', async ({ page }, info) => {
+    const log = await installMocks(page, { isgpay: true })
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    await page.getByRole('button', { name: 'Add Website Health Check to cart' }).click()
+    const drawer = await openCart(page)
+
+    const radios = drawer.getByRole('radio')
+    await expect(radios).toHaveCount(3)
+    await expect(radios.nth(0)).toBeChecked() // Airpay merchant 1 stays the default
+
+    await drawer.getByLabel('Name (optional)').fill('Test Customer')
+    await drawer.getByLabel('Email').fill('test@example.com')
+    await drawer.getByLabel('Phone').fill('9999999999')
+
+    await drawer.locator('label:has(input[type=radio][value="isgpay"])').click()
+    await expect(drawer.getByRole('radio', { name: /ISGPay — Sandbox Test/ })).toBeChecked()
+    await expect(radios.nth(0)).not.toBeChecked()
+    await expect(radios.nth(1)).not.toBeChecked()
+    await expect(drawer.getByText('Sandbox test', { exact: true })).toBeVisible()
+
+    // Switching gateways keeps the basket and the contact details.
+    await drawer.locator('label:has(input[type=radio][value="2"])').click()
+    await drawer.locator('label:has(input[type=radio][value="isgpay"])').click()
+    await expect(drawer.getByLabel('Email')).toHaveValue('test@example.com')
+    await expect(drawer.getByText('Website Health Check')).toBeVisible()
+
+    await drawer.getByRole('checkbox').check()
+    await shot(page, info.project.name, 'checkout-isgpay-ready')
+    await drawer.getByRole('button', { name: /^Pay Now,/ }).dblclick()
+    await page.waitForURL(ISGPAY_SANDBOX)
+
+    expect(log.createPaymentBodies).toHaveLength(0) // Airpay never reached
+    expect(log.isgpayCreateBodies).toHaveLength(1) // double-click → one order
+    const body = log.isgpayCreateBodies[0] ?? {}
+    expect(body.serviceSlugs).toEqual(['tech-maintenance', 'website-health-check'])
+    expect(Object.keys(body).sort()).toEqual(['contact', 'guestToken', 'serviceSlugs'])
+    expect(log.isgpaySandboxPosts).toHaveLength(1)
+    expect(new URLSearchParams(log.isgpaySandboxPosts[0]).get('EncData')).toBe('e2e-sealed')
+  })
+
+  test('a server amount that differs from the cart total stops before the sandbox', async ({ page }) => {
+    const log = await installMocks(page, { isgpay: true, chargedAmount: 1 })
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    const drawer = await openCart(page)
+    await drawer.locator('label:has(input[type=radio][value="isgpay"])').click()
+    await drawer.getByLabel('Email').fill('test@example.com')
+    await drawer.getByRole('checkbox').check()
+    await drawer.getByRole('button', { name: /^Pay Now,/ }).click()
+    await expect(drawer.getByRole('button', { name: /^Try Again,/ })).toBeVisible()
+    expect(log.isgpaySandboxPosts).toHaveLength(0)
+  })
+
+  test('verified sandbox payment is shown as a test, never as a purchase', async ({ page }, info) => {
+    await installMocks(page)
+    await page.goto(`/order-success?ref=${E2E_ISG_REF}&t=e2e-isg-token`)
+    await expect(page.getByRole('heading', { level: 1, name: 'Sandbox test payment verified' })).toBeVisible()
+    await expect(page.getByText(/not a real purchase/)).toBeVisible()
+    await expect(page.getByText('Payment confirmed')).toHaveCount(0)
+    await shot(page, info.project.name, 'order-isgpay-paid')
+    expect(await seriousAxe(page, 'main')).toEqual([])
+  })
+
+  test('a verified decline is shown as not approved', async ({ page }) => {
+    await installMocks(page, {
+      isgpayStatus: { status: 'pending_payment', settled: false, verification: { outcome: 'declined_pending' } },
+    })
+    await page.goto(`/order-success?ref=${E2E_ISG_REF}&t=e2e-isg-token`)
+    await expect(page.getByRole('heading', { level: 1, name: 'Payment not approved' })).toBeVisible()
+  })
+
+  test('an unverifiable gateway return claims nothing', async ({ page }) => {
+    await installMocks(page)
+    await page.goto('/order-success?status=unverified')
+    await expect(page.getByRole('heading', { level: 1, name: 'We could not verify the gateway response' })).toBeVisible()
+  })
+})
+
 test.describe('payment status page', () => {
   const CASES = [
     ['paid', 'Payment confirmed'],
@@ -244,8 +334,9 @@ test.describe('navigation', () => {
       }
     }
     expect(broken).toEqual([])
-    // Every route except the unlinked /order-success, plus one page per service.
-    expect(seen.size).toBe(11 + ALL_SERVICES.length)
+    // Every linked route (incl. /login and /register), excluding the unlinked
+    // /order-success and /account (and the hidden /forgot-password), plus one page per service.
+    expect(seen.size).toBe(13 + ALL_SERVICES.length)
   })
 
   test('mobile menu opens, navigates and marks the active page', async ({ page }) => {
@@ -345,5 +436,117 @@ test.describe('website navigation and catalogue browsing', () => {
     await question.click()
     await page.locator('#refund-policy').getByRole('link', { name: 'Refund & Cancellation Policy' }).click()
     await expect(page).toHaveURL(/\/refund$/)
+  })
+})
+
+test.describe('accounts (custom /api/auth)', () => {
+  test('signed-out visitors are sent from /account to login', async ({ page }) => {
+    await installMocks(page)
+    await page.goto('/account')
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Welcome back' })).toBeVisible()
+  })
+
+  test('sign in, see and edit the account, log out', async ({ page }, info) => {
+    const log = await installMocks(page)
+    await page.goto('/account')
+    await expect(page).toHaveURL(/\/login$/)
+
+    await page.getByLabel('Email').fill(E2E_ACCOUNT.email)
+    await page.getByLabel('Password', { exact: true }).fill('wrong-pass-1')
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await expect(page.getByRole('alert')).toHaveText('That email or password is not correct.')
+
+    await page.getByLabel('Password', { exact: true }).fill(E2E_ACCOUNT.password)
+    await page.getByRole('button', { name: 'Show password' }).click()
+    await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('type', 'text')
+    await shot(page, info.project.name, 'login-filled')
+    await page.getByRole('button', { name: 'Sign in' }).click()
+
+    // Returns to where the guard sent us from.
+    await expect(page).toHaveURL(/\/account$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible()
+    await expect(page.getByText(E2E_ACCOUNT.email)).toBeVisible()
+    await expect(page.getByText('1 November 2026')).toBeVisible()
+    await shot(page, info.project.name, 'account')
+
+    await page.getByLabel('Display name').fill('Asha R.')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page.getByRole('status')).toHaveText('Name updated.')
+    await expect(page.locator('dd').first()).toHaveText('Asha R.')
+
+    // The session survives a reload (it is the server's, not the page's).
+    await page.reload()
+    await expect(page.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Log out' }).click()
+    await expect(page).toHaveURL(/\/$/)
+    await page.goto('/account')
+    await expect(page).toHaveURL(/\/login$/)
+    expect(log.unmocked).toEqual([])
+  })
+
+  test('register, land signed in on /account (unverified), log out', async ({ page }, info) => {
+    const log = await installMocks(page)
+    await page.goto('/login')
+    await page.getByRole('link', { name: 'Create an account' }).click()
+    await expect(page).toHaveURL(/\/register$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible()
+
+    // Client-side validation before any request.
+    await page.getByRole('button', { name: 'Create account' }).click()
+    await expect(page.getByText('Enter your full name.')).toBeVisible()
+    await expect(page.getByText('Enter your email address.')).toBeVisible()
+
+    await page.getByLabel('Full name').fill('Ravi Kumar')
+    await page.getByLabel('Email').fill(E2E_ACCOUNT.email)
+    await page.getByLabel('Password', { exact: true }).fill('another-pass-7')
+    await page.getByLabel('Confirm password').fill('another-pass-7')
+    await page.getByRole('button', { name: 'Create account' }).click()
+    await expect(page.getByRole('alert')).toHaveText('An account with this email already exists. Sign in instead.')
+
+    await page.getByLabel('Email').fill('ravi@example.com')
+    await shot(page, info.project.name, 'register-filled')
+    await page.getByRole('button', { name: 'Create account' }).click()
+
+    await expect(page).toHaveURL(/\/account$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible()
+    await expect(page.getByText('ravi@example.com')).toBeVisible()
+    await expect(page.getByText('Email not verified')).toBeVisible()
+    await shot(page, info.project.name, 'account-unverified')
+
+    // The session survives a reload.
+    await page.reload()
+    await expect(page.getByText('ravi@example.com')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Log out' }).click()
+    await expect(page).toHaveURL(/\/$/)
+    expect(log.unmocked).toEqual([])
+  })
+
+  test('password recovery stays hidden', async ({ page }) => {
+    await installMocks(page)
+    await page.goto('/login')
+    await expect(page.getByRole('link', { name: /forgot password/i })).toHaveCount(0)
+    for (const path of ['/forgot-password', '/reset-password']) {
+      await page.goto(path)
+      await expect(page.getByRole('heading', { level: 1 })).not.toHaveText(/password/i)
+    }
+  })
+
+  test('a signed-in shopper still checks out as a guest', async ({ page }) => {
+    const log = await installMocks(page, { signedIn: true })
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    const drawer = await openCart(page)
+    await drawer.getByLabel('Email').fill('buyer@example.com')
+    await drawer.getByLabel('Phone').fill('9876543210')
+    await drawer.locator('label:has(input[type=radio][value="1"])').click()
+    await drawer.getByRole('checkbox').check()
+    await drawer.getByRole('button', { name: /^Pay Now,/ }).click()
+    await page.waitForURL(MOCK_GATEWAY)
+    expect(log.createPaymentBodies).toHaveLength(1)
+    // Payment stays independent of the account: nothing about the user is sent.
+    expect(JSON.stringify(log.createPaymentBodies[0])).not.toMatch(/e2e-user|asha@example\.com/)
   })
 })

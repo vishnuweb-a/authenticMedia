@@ -1,6 +1,11 @@
 import { createBrowserRouter } from 'react-router-dom'
 
 import { AppShell } from '@/components/layout'
+import { AUTH_FEATURES, GuestOnly, RequireAuth } from '@/features/auth'
+import { AccountPage } from './pages/account-page'
+import { ForgotPasswordPage } from './pages/forgot-password-page'
+import { LoginPage } from './pages/login-page'
+import { RegisterPage } from './pages/register-page'
 import { AboutPage } from './pages/about-page'
 import { ContactPage } from './pages/contact-page'
 import { HomePage } from './pages/home-page'
@@ -41,6 +46,18 @@ export const router = createBrowserRouter([
       { path: ROUTES.faq, element: <FaqPage /> },
       { path: ROUTES.policies, element: <PoliciesPage /> },
       { path: ROUTES.orderSuccess, element: <OrderSuccessPage /> },
+      {
+        element: <GuestOnly />,
+        children: [
+          { path: ROUTES.login, element: <LoginPage /> },
+          { path: ROUTES.register, element: <RegisterPage /> },
+          // Hidden until an email service exists (AUTH_FEATURES).
+          ...(AUTH_FEATURES.passwordRecovery
+            ? [{ path: ROUTES.forgotPassword, element: <ForgotPasswordPage /> }]
+            : []),
+        ],
+      },
+      { element: <RequireAuth />, children: [{ path: ROUTES.account, element: <AccountPage /> }] },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

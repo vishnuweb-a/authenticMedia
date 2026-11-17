@@ -1,14 +1,16 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import {
   createAirpayPayment,
+  createIsgpayPayment,
+  fetchIsgpayAvailability,
   openPaymentWindow,
   PAYMENT_WINDOW_NAME,
   submitToAirpay,
+  submitToIsgpay,
 } from '@/services'
-import type { AirpayMerchantChoice } from '@/services'
 import { useCart } from '@/stores'
-import type { CheckoutStatus } from '../types/cart.types'
+import type { CheckoutGateway, CheckoutStatus } from '../types/cart.types'
 import { chargedAmountMismatch } from '../lib/charged-amount'
 import {
   EMPTY_CONTACT,
@@ -27,13 +29,13 @@ export interface UseCheckoutResult {
   contactErrors: CheckoutContactErrors
   setContactValue: (field: keyof CheckoutContactValues, value: string) => void
   /**
-   * Which of the two Airpay payment options the shopper has chosen (§2.4).
-   *
-   * Exactly one, always — the type admits no third value and no "both", so one
-   * checkout action can only ever create one order for one merchant.
+   * The ONE gateway this checkout pays through: Airpay merchant 1 or 2 (§2.4),
+   * or the ISGPay sandbox. A single value, so never "both".
    */
-  merchant: AirpayMerchantChoice
-  setMerchant: (merchant: AirpayMerchantChoice) => void
+  gateway: CheckoutGateway
+  setGateway: (gateway: CheckoutGateway) => void
+  /** Whether the server offers the ISGPay sandbox to this browser. */
+  isgpayAvailable: boolean
   /** Terms acceptance. Unticked by default; payment cannot start without it. */
   termsAccepted: boolean
   setTermsAccepted: (accepted: boolean) => void
@@ -90,6 +92,8 @@ export interface UseCheckoutResult {
  * clearing it would lose their basket if they abandoned the gateway or the
  * payment failed.
  */
+const DEFAULT_GATEWAY: CheckoutGateway = { kind: 'airpay', merchant: 1 }
+
 export function useCheckout(): UseCheckoutResult {
   const { items, total, refresh } = useCart()
   const [status, setStatus] = useState<CheckoutStatus>('idle')
@@ -99,10 +103,26 @@ export function useCheckout(): UseCheckoutResult {
   const [hasAttempted, setHasAttempted] = useState(false)
   // Merchant 1 is preselected: it is the production-proven account, so the
   // shopper who changes nothing gets the flow that has always worked.
-  const [merchant, setMerchant] = useState<AirpayMerchantChoice>(1)
+  const [selectedGateway, setGateway] = useState<CheckoutGateway>(DEFAULT_GATEWAY)
+  const [isgpayAvailable, setIsgpayAvailable] = useState(false)
   const [termsAccepted, setTermsAcceptedState] = useState(false)
   const [termsError, setTermsError] = useState<string | null>(null)
   const [awaiting, setAwaiting] = useState<UseCheckoutResult['awaiting']>(null)
+
+  // Server decides (feature flag + tester cookie). Until it answers: hidden.
+  useEffect(() => {
+    let cancelled = false
+    void fetchIsgpayAvailability().then((available) => {
+      if (!cancelled) setIsgpayAvailable(available)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // A sandbox choice the server no longer offers falls back to the default.
+  const gateway =
+    selectedGateway.kind === 'isgpay' && !isgpayAvailable ? DEFAULT_GATEWAY : selectedGateway
 
   const reset = useCallback(() => {
     setStatus('idle')
@@ -110,7 +130,7 @@ export function useCheckout(): UseCheckoutResult {
     setContactErrors({})
     setHasAttempted(false)
     setAwaiting(null)
-    setMerchant(1)
+    setGateway(DEFAULT_GATEWAY)
     setTermsAcceptedState(false)
     setTermsError(null)
   }, [])
@@ -157,6 +177,37 @@ export function useCheckout(): UseCheckoutResult {
 
     setStatus('pending')
     setError(null)
+
+    // ISGPay sandbox: its own endpoint, a full-tab POST, and ISGPay returns this
+    // browser to our ReturnURL → /order-success. No Airpay code is reached.
+    if (gateway.kind === 'isgpay') {
+      const { firstName, lastName } = splitName(contact.name)
+      const created = await createIsgpayPayment({
+        serviceSlugs: items.map((item) => item.serviceId),
+        contact: {
+          firstName,
+          lastName,
+          email: contact.email.trim(),
+          phone: normalisePhone(contact.phone),
+        },
+      })
+      if (!created.ok) {
+        setError(created.error.message)
+        setStatus('failed')
+        return
+      }
+      const mismatch = chargedAmountMismatch(total, created.data.amount)
+      if (mismatch) {
+        setError(mismatch)
+        setStatus('failed')
+        refresh()
+        return
+      }
+      // Status stays 'pending' until the page unloads: no second order.
+      submitToIsgpay(created.data)
+      return
+    }
+    const merchant = gateway.merchant
 
     // ⚠ Opened BEFORE the await (§14.3). A popup blocker permits a window
     // opened during the click gesture and refuses one opened after the stack
@@ -229,7 +280,7 @@ export function useCheckout(): UseCheckoutResult {
     // path, on the same trigger the success page has always used.
     submitToAirpay(handoff, document, PAYMENT_WINDOW_NAME)
     setAwaiting({ orderRef: handoff.orderRef, accessToken: handoff.accessToken })
-  }, [contact, items, total, refresh, merchant, status, termsAccepted])
+  }, [contact, items, total, refresh, gateway, status, termsAccepted])
 
   return {
     status,
@@ -237,8 +288,9 @@ export function useCheckout(): UseCheckoutResult {
     contact,
     contactErrors,
     setContactValue,
-    merchant,
-    setMerchant,
+    gateway,
+    setGateway,
+    isgpayAvailable,
     termsAccepted,
     setTermsAccepted,
     termsError,

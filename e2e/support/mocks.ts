@@ -22,7 +22,7 @@ export interface MockOptions {
   isgpay?: boolean
   /** Body of /api/payments/isgpay/status (ISG references only). */
   isgpayStatus?: Record<string, unknown>
-  /** Start signed in as the e2e account (default: signed out). */
+  /** Start signed in as the e2e account (default: signed in; the site is members-only). */
   signedIn?: boolean
 }
 
@@ -161,7 +161,7 @@ export async function installMocks(page: Page, options: MockOptions = {}): Promi
   )
 
   // Stateful stand-in for /api/auth (cookie session lives in this closure).
-  let user = options.signedIn ? { ...E2E_USER } : null
+  let user = options.signedIn !== false ? { ...E2E_USER } : null
   await page.route('**/api/auth/**', async (route, request) => {
     const action = new URL(request.url()).pathname.split('/').pop()
     const body = (request.postDataJSON() ?? {}) as Record<string, string>

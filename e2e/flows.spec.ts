@@ -559,4 +559,14 @@ test.describe('accounts (custom /api/auth)', () => {
     await page.goto('/privacy')
     await expect(page).toHaveURL(/\/privacy$/)
   })
+
+  test('a signed-out shopper returning from the gateway still sees the payment result', async ({ page }) => {
+    await installMocks(page, { signedIn: false })
+    await page.goto('/order-success?ref=AM-E2E-00000001&t=e2e-token')
+    await expect(page).toHaveURL(/\/order-success/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Payment confirmed' })).toBeVisible()
+    await page.goto(`/order-success?ref=${E2E_ISG_REF}&t=e2e-isg-token`)
+    await expect(page).toHaveURL(/\/order-success/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Sandbox test payment verified' })).toBeVisible()
+  })
 })

@@ -39,6 +39,9 @@ export const router = createBrowserRouter([
       { path: ROUTES.serviceDelivery, element: <LegalPageLayout doc={SERVICE_DELIVERY} /> },
       { path: ROUTES.grievance, element: <LegalPageLayout doc={GRIEVANCE} /> },
       { path: ROUTES.policies, element: <PoliciesPage /> },
+      // Payment return: a shopper coming back from the gateway may be signed out. Stays public;
+      // the page shows only what the order's own access token unlocks (checked by the API).
+      { path: ROUTES.orderSuccess, element: <OrderSuccessPage /> },
       {
         element: <GuestOnly />,
         children: [
@@ -61,7 +64,6 @@ export const router = createBrowserRouter([
           { path: ROUTES.about, element: <AboutPage /> },
           { path: ROUTES.contact, element: <ContactPage /> },
           { path: ROUTES.faq, element: <FaqPage /> },
-          { path: ROUTES.orderSuccess, element: <OrderSuccessPage /> },
           { path: ROUTES.account, element: <AccountPage /> },
         ],
       },

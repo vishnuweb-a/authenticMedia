@@ -183,24 +183,28 @@ export async function findUnsettledIsgpayOrders(
 }
 
 /**
- * The newest still-pending ISGPay order of this shopper (guest token) in this
- * environment inside the window, or null. THROWS on a database error: the
- * caller must treat "unknown" as "an earlier attempt may exist" and not charge.
+ * The oldest still-pending ISGPay order of this shopper in this environment,
+ * matched by guest token OR signed-in account (another device), or null. No
+ * time window: age never proves an attempt cannot still settle. THROWS on a
+ * database error: the caller must treat "unknown" as "an earlier attempt may
+ * exist" and not charge. The atomic guarantee is create_isgpay_order's (IG409);
+ * this lookup only lets the caller re-verify an earlier attempt first.
  */
 export async function findUnresolvedIsgpayOrder(
   guestToken: string,
+  appUserId: string | null,
   env: IsgpayEnv,
-  windowMs: number,
 ): Promise<OrderRecord | null> {
+  // Both values are validated UUIDs (request guard / session row), safe inside the filter.
+  const owner = appUserId === null ? `guest_token.eq.${guestToken}` : `guest_token.eq.${guestToken},app_user_id.eq.${appUserId}`
   const { data, error } = await getServiceClient()
     .from('orders')
     .select(ORDER_COLUMNS)
     .eq('payment_method', 'isgpay')
-    .eq('guest_token', guestToken)
+    .or(owner)
     .eq('gateway_environment', env)
     .eq('status', 'pending_payment')
-    .gte('created_at', new Date(Date.now() - windowMs).toISOString())
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: true })
     .limit(1)
     .returns<OrderRow[]>()
   if (error || !data) throw new Error('findUnresolvedIsgpayOrder failed')

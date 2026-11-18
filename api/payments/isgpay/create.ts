@@ -1,7 +1,9 @@
+import { hashToken, readSessionToken } from '../../_lib/auth.js'
+import { findSessionUser } from '../../_lib/auth-store.js'
 import { hasContact, normaliseContact } from '../../_lib/contact.js'
 import { findUnresolvedIsgpayOrder, getServiceClient } from '../../_lib/db.js'
 import { noStore, type ApiRequest, type ApiResponse } from '../../_lib/http.js'
-import { isgpayCheckoutAccess } from '../../_lib/isgpay-checkout.js'
+import { isgpayCheckoutAccess, type CheckoutAccess } from '../../_lib/isgpay-checkout.js'
 import { loadIsgpayConfig, type IsgpayConfig } from '../../_lib/isgpay-config.js'
 import { settleIsgpayOrder } from '../../_lib/isgpay-settle.js'
 import { buildSaleRequest, generateTxnRefNo, inrToPaise } from '../../_lib/isgpay.js'
@@ -24,13 +26,23 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SLUG_RE = /^[a-z0-9-]{1,80}$/
 const MAX_SERVICES = 25
 
-/**
+/*
  * A live order still pending after a hand-off may yet be approved by the bank
  * (late callback, closed tab, no verdict). Until ISGPay confirms which response
  * codes are final, such an attempt blocks a NEW live charge by the same shopper
- * for one full day: past the callback retries and at least one reconcile run.
+ * (guest token or signed-in account) with no time limit, until a verified
+ * Status Query settles it. create_isgpay_order enforces this atomically
+ * (IG409); the lookup below only re-verifies the earlier attempt first.
  */
-export const UNRESOLVED_ATTEMPT_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/** The signed-in account behind this request, or null. THROWS when the session cannot be read. */
+async function signedInUserId(req: ApiRequest, access: CheckoutAccess): Promise<string | null> {
+  if (access.liveTesterId !== undefined) return access.liveTesterId
+  const token = readSessionToken(req)
+  if (token === null) return null
+  const user = await findSessionUser(hashToken(token))
+  return user !== null && UUID_RE.test(user.id) ? user.id : null
+}
 
 function enabledConfig(): IsgpayConfig | null {
   try {
@@ -95,10 +107,19 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   // Never open a second live charge while an earlier one may still succeed.
   // The earlier TxnRefNo stays untouched for investigation; a timeout or an
   // unreadable answer is never taken to mean "it failed".
+  // Sandbox orders are never matched (env filter here and in SQL), so they never block live ones.
+  let appUserId: string | null = null
   if (config.env === 'production') {
+    try {
+      appUserId = await signedInUserId(req, access)
+    } catch {
+      logEvent('isgpay.checkout.session_lookup_failed')
+      res.status(502).json({ error: 'order_failed' })
+      return
+    }
     let earlier
     try {
-      earlier = await findUnresolvedIsgpayOrder(guestToken, config.env, UNRESOLVED_ATTEMPT_WINDOW_MS)
+      earlier = await findUnresolvedIsgpayOrder(guestToken, appUserId, config.env)
     } catch {
       logEvent('isgpay.checkout.duplicate_check_failed')
       res.status(502).json({ error: 'order_failed' })
@@ -149,7 +170,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     p_contact_name: `${contact.firstName} ${contact.lastName}`.trim() || null,
     p_contact_email: contact.email || null,
     p_contact_phone: contact.phone || null,
+    p_app_user_id: appUserId,
   })
+  if (error?.code === 'IG409') {
+    // A concurrent request (another tab or device) won the race; its order stands untouched.
+    logEvent('isgpay.checkout.blocked_unresolved_atomic', { txnRefNo, earlier: error.details })
+    res.status(409).json({ error: 'payment_unresolved' })
+    return
+  }
   const row = (Array.isArray(data) ? data[0] : data) as { total_inr?: unknown; access_token?: unknown } | null
   if (error || typeof row?.total_inr !== 'number' || typeof row.access_token !== 'string') {
     logEvent('isgpay.checkout.order_failed', { txnRefNo, code: error?.code })

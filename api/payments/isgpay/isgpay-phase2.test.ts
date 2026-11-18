@@ -18,6 +18,9 @@ const state = vi.hoisted(() => ({
   rpc: [] as Array<{ fn: string; args: Record<string, unknown> }>,
   unresolved: null as null | { reference: string },
   unresolvedThrows: false,
+  unresolvedArgs: [] as unknown[][],
+  /** Stands in for create_isgpay_order's answer; default = order created. */
+  rpcAnswer: null as null | ((args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>),
   sessions: new Map<string, { id: string; email_verified_at: string | null }>(),
   sessionThrows: false,
   settle: (async () => ({ outcome: 'pending' })) as (ref: string) => Promise<{ outcome: string }>,
@@ -35,10 +38,12 @@ vi.mock('../../_lib/db.js', () => ({
     }),
     rpc: async (fn: string, args: Record<string, unknown>) => {
       state.rpc.push({ fn, args })
+      if (state.rpcAnswer) return state.rpcAnswer(args)
       return { data: [{ total_inr: 149, access_token: 'tok-uuid' }], error: null }
     },
   }),
-  findUnresolvedIsgpayOrder: async () => {
+  findUnresolvedIsgpayOrder: async (...args: unknown[]) => {
+    state.unresolvedArgs.push(args)
     if (state.unresolvedThrows) throw new Error('db down')
     return state.unresolved
   },
@@ -92,8 +97,9 @@ async function call(handler: (q: ApiRequest, r: ApiResponse) => Promise<void>, r
 }
 
 beforeEach(() => {
-  Object.assign(state, { unresolved: null, unresolvedThrows: false, sessionThrows: false, sweep: [] })
+  Object.assign(state, { unresolved: null, unresolvedThrows: false, sessionThrows: false, sweep: [], rpcAnswer: null })
   state.rpc.length = 0
+  state.unresolvedArgs.length = 0
   state.settled.length = 0
   state.sweepArgs.length = 0
   state.sessions.clear()
@@ -216,6 +222,90 @@ describe('duplicate-payment protection (live)', () => {
     })
     expect((await call(create, { method: 'POST', body })).code).toBe(200)
     expect(state.settled).toHaveLength(0)
+  })
+})
+
+describe('atomic duplicate-payment guard (Phase 3)', () => {
+  const EARLIER = 'ISG0MABCDEF0123456789ABCDEF'
+  const OTHER_DEVICE_GUEST = '44444444-4444-4444-8444-444444444444'
+  const blocked = { data: null, error: { code: 'IG409', message: 'create_isgpay_order: unresolved live payment', details: EARLIER } }
+
+  /** Models create_isgpay_order: one pending live order per guest token / account. */
+  function databaseGuard() {
+    const pending: Array<{ guest: unknown; user: unknown }> = []
+    state.rpcAnswer = async (args) => {
+      await new Promise((r) => setTimeout(r, 5)) // both requests are in flight together
+      const user = args['p_app_user_id']
+      if (pending.some((p) => p.guest === args['p_guest_token'] || (user !== null && p.user === user))) return blocked
+      pending.push({ guest: args['p_guest_token'], user })
+      return { data: [{ total_inr: 149, access_token: 'tok-uuid' }], error: null }
+    }
+  }
+
+  beforeEach(() => {
+    process.env['ISGPAY_PRODUCTION_LAUNCH_ENABLED'] = 'true'
+  })
+
+  it('two concurrent requests that both pass the pre-check: exactly one order, the other gets 409', async () => {
+    databaseGuard()
+    const [a, b] = await Promise.all([call(create, { method: 'POST', body }), call(create, { method: 'POST', body })])
+    expect([a.code, b.code].sort()).toEqual([200, 409])
+    expect([a, b].filter((o) => (o.body as { actionUrl?: string }).actionUrl !== undefined)).toHaveLength(1)
+    expect([a, b].find((o) => o.code === 409)?.body).toEqual({ error: 'payment_unresolved' })
+  })
+
+  it('the same signed-in account on two devices (different guest tokens) cannot hold two live charges', async () => {
+    databaseGuard()
+    const other = { ...body, guestToken: OTHER_DEVICE_GUEST }
+    const [a, b] = await Promise.all([
+      call(create, { method: 'POST', headers: cookie, body }),
+      call(create, { method: 'POST', headers: cookie, body: other }),
+    ])
+    expect([a.code, b.code].sort()).toEqual([200, 409])
+    expect(state.rpc.map((r) => r.args['p_app_user_id'])).toEqual([TESTER, TESTER])
+    expect(state.unresolvedArgs).toContainEqual([OTHER_DEVICE_GUEST, TESTER, 'production'])
+  })
+
+  it('the account comes from the server session, never the request body', async () => {
+    await call(create, { method: 'POST', body: { ...body, appUserId: TESTER, userId: TESTER } })
+    expect(state.rpc[0]?.args['p_app_user_id']).toBeNull()
+  })
+
+  it('the pre-check has no time window: an attempt of any age is re-verified, and still blocks while unresolved', async () => {
+    state.unresolved = { reference: EARLIER }
+    expect((await call(create, { method: 'POST', body })).code).toBe(409)
+    expect(state.unresolvedArgs).toEqual([[GUEST, null, 'production']]) // no age argument exists any more
+    expect(state.settled).toEqual([EARLIER])
+  })
+
+  it('a database refusal preserves the earlier order: no new hand-off, nothing else written', async () => {
+    state.rpcAnswer = async () => blocked
+    const out = await call(create, { method: 'POST', body })
+    expect(out.code).toBe(409)
+    expect(state.rpc).toHaveLength(1) // only the refused create; no settle/cancel of the earlier row
+  })
+
+  it('fails closed when the session cannot be read or the database errors', async () => {
+    state.sessionThrows = true
+    expect((await call(create, { method: 'POST', headers: cookie, body })).code).toBe(502) // a cookie we cannot resolve = unknown shopper
+    expect(state.rpc).toHaveLength(0)
+    state.sessionThrows = false
+    state.rpcAnswer = async () => ({ data: null, error: { code: '40P01', message: 'deadlock detected' } })
+    expect((await call(create, { method: 'POST', body })).code).toBe(502)
+  })
+
+  it('sandbox (UAT) orders are never guarded, never pass an account, and never query the session', async () => {
+    Object.assign(process.env, {
+      ISGPAY_ENV: 'uat',
+      VERCEL_ENV: 'preview',
+      ISGPAY_SALE_URL: 'https://sandbox.isgpay.com/ISGPay-Genius/request.action',
+      ISGPAY_STATUS_URL: 'https://sandbox.isgpay.com/ISGPay-Genius/Status',
+    })
+    state.sessionThrows = true
+    const out = await call(create, { method: 'POST', headers: cookie, body })
+    expect(out.code).toBe(200)
+    expect(state.rpc[0]?.args).toMatchObject({ p_gateway_environment: 'uat', p_app_user_id: null })
+    expect(state.unresolvedArgs).toHaveLength(0)
   })
 })
 

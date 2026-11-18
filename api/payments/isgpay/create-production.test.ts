@@ -17,6 +17,7 @@ vi.mock('../../_lib/isgpay-config.js', async (importOriginal) => {
 const db = vi.hoisted(() => ({ rpc: [] as Array<{ fn: string; args: Record<string, unknown> }> }))
 
 vi.mock('../../_lib/db.js', () => ({
+  findUnresolvedIsgpayOrder: async () => null,
   getServiceClient: () => ({
     from: () => ({
       select: () => ({

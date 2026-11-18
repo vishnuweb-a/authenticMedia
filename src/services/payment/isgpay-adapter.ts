@@ -45,6 +45,9 @@ export interface CreateIsgpayPaymentInput {
 
 const UNAVAILABLE = 'ISGPay is unavailable right now. Please try again shortly.'
 
+const UNRESOLVED =
+  'We are still confirming your earlier payment attempt. Please wait a few minutes before paying again, so you are not charged twice.'
+
 const NOT_AVAILABLE: IsgpayAvailability = { available: false, testMode: true }
 
 /** Whether the server offers ISGPay to THIS browser, and in which mode. Any failure means no. */
@@ -73,6 +76,8 @@ export async function createIsgpayPayment(
         contact: input.contact,
       }),
     })
+    // An earlier live attempt is still unresolved: never start a second charge.
+    if (response.status === 409) return err<IsgpayHandoff>('payment_unresolved', UNRESOLVED)
     if (!response.ok) return err<IsgpayHandoff>('create_failed', UNAVAILABLE)
 
     const data = (await response.json()) as Partial<Record<keyof IsgpayHandoff, unknown>>

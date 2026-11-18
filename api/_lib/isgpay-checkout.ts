@@ -1,5 +1,7 @@
 import { createHmac } from 'node:crypto'
 
+import { hashToken, readSessionToken } from './auth.js'
+import { findSessionUser } from './auth-store.js'
 import { header, safeEqual, type ApiRequest } from './http.js'
 
 /**
@@ -14,10 +16,15 @@ import { header, safeEqual, type ApiRequest } from './http.js'
  *   once. Ordinary shoppers on authenticmedia.fun never see the option.
  *   Previews and local dev need only the flag: no real customer pays there.
  *
- * ISGPAY_ENV=production (live money):
- *   Also ISGPAY_PRODUCTION_LAUNCH_ENABLED=true — the explicit launch gate,
- *   off by default — and the Vercel Production deployment. The tester cookie
- *   does not apply: it unlocks the sandbox, never live payments.
+ * ISGPAY_ENV=production (live money), on the Vercel Production deployment only,
+ * and then exactly one of two independent switches, both off by default:
+ *   - ISGPAY_PRODUCTION_LAUNCH_ENABLED=true — public launch, every shopper; or
+ *   - ISGPAY_LIVE_PRIVATE_TEST_ENABLED=true — private test: only a signed-in,
+ *     VERIFIED account whose id is in ISGPAY_LIVE_TESTER_USER_IDS. The account
+ *     comes from the server-side session (HttpOnly cookie → auth RPC), never
+ *     from a client flag or profile field. Unverified self-registered accounts
+ *     can never qualify, whatever id they hold.
+ * The sandbox tester cookie / ISGPAY_UAT_ACCESS_KEY never authorise live money.
  */
 
 /** `__Host-`: Secure, Path=/, no Domain — cannot be planted by a subdomain. */
@@ -59,11 +66,42 @@ export function isTester(req: ApiRequest, now: number = Date.now()): boolean {
   return safeEqual(match[2] as string, sign(key, expiry))
 }
 
-/** Whether this request may be offered / may create an ISGPay checkout order. */
-export function isgpayCheckoutOpen(req: ApiRequest, now: number = Date.now()): boolean {
-  if (process.env['ISGPAY_CHECKOUT_ENABLED'] !== 'true') return false
-  if (process.env['ISGPAY_ENV']?.trim().toLowerCase() === 'production') {
-    return process.env['VERCEL_ENV'] === 'production' && process.env['ISGPAY_PRODUCTION_LAUNCH_ENABLED'] === 'true'
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/** The allowlisted live tester ids. Malformed entries are dropped, never matched. */
+function liveTesterIds(): ReadonlySet<string> {
+  const raw = process.env['ISGPAY_LIVE_TESTER_USER_IDS'] ?? ''
+  return new Set(raw.split(',').map((id) => id.trim().toLowerCase()).filter((id) => UUID_RE.test(id)))
+}
+
+/** The verified, allowlisted account behind this request, or null. Fails closed on any error. */
+export async function liveTesterId(req: ApiRequest): Promise<string | null> {
+  if (process.env['ISGPAY_LIVE_PRIVATE_TEST_ENABLED'] !== 'true') return null
+  const allowed = liveTesterIds()
+  const token = readSessionToken(req)
+  if (allowed.size === 0 || token === null) return null
+  try {
+    const user = await findSessionUser(hashToken(token))
+    return user !== null && user.email_verified_at !== null && allowed.has(user.id.toLowerCase()) ? user.id : null
+  } catch {
+    return null
   }
-  return process.env['VERCEL_ENV'] !== 'production' || isTester(req, now)
+}
+
+export interface CheckoutAccess {
+  readonly open: boolean
+  /** Set only when access came from the private live-test allowlist (for the audit log). */
+  readonly liveTesterId?: string
+}
+
+/** Whether this request may be offered / may create an ISGPay checkout order. */
+export async function isgpayCheckoutAccess(req: ApiRequest, now: number = Date.now()): Promise<CheckoutAccess> {
+  if (process.env['ISGPAY_CHECKOUT_ENABLED'] !== 'true') return { open: false }
+  if (process.env['ISGPAY_ENV']?.trim().toLowerCase() === 'production') {
+    if (process.env['VERCEL_ENV'] !== 'production') return { open: false }
+    if (process.env['ISGPAY_PRODUCTION_LAUNCH_ENABLED'] === 'true') return { open: true }
+    const id = await liveTesterId(req)
+    return id === null ? { open: false } : { open: true, liveTesterId: id }
+  }
+  return { open: process.env['VERCEL_ENV'] !== 'production' || isTester(req, now) }
 }

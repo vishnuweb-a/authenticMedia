@@ -206,3 +206,17 @@ end;
 $$;
 
 revoke all on function public.settle_isgpay_order(text, text, text) from public, anon, authenticated;
+
+-- ── Explicit EXECUTE privileges ─────────────────────────────────────────────
+-- Supabase's default privileges already grant service_role, but the model is
+-- stated here rather than assumed: only the server-side service role may call
+-- any payment function; PUBLIC, anon and authenticated may not.
+grant execute on function public.create_isgpay_order(text[], text, uuid, text, text, text, text) to service_role;
+grant execute on function public.settle_isgpay_order(text, text, text, text) to service_role;
+grant execute on function public.settle_isgpay_order(text, text, text) to service_role;
+
+-- ── Unresolved-attempt lookup (duplicate-payment guard) ─────────────────────
+-- Serves findUnresolvedIsgpayOrder: one shopper's still-pending ISGPay orders.
+create index if not exists orders_isgpay_guest_pending_idx
+  on public.orders (guest_token, created_at desc)
+  where payment_method = 'isgpay' and status = 'pending_payment';

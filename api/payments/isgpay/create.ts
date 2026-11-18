@@ -1,8 +1,9 @@
 import { hasContact, normaliseContact } from '../../_lib/contact.js'
-import { getServiceClient } from '../../_lib/db.js'
+import { findUnresolvedIsgpayOrder, getServiceClient } from '../../_lib/db.js'
 import { noStore, type ApiRequest, type ApiResponse } from '../../_lib/http.js'
-import { isgpayCheckoutOpen } from '../../_lib/isgpay-checkout.js'
+import { isgpayCheckoutAccess } from '../../_lib/isgpay-checkout.js'
 import { loadIsgpayConfig, type IsgpayConfig } from '../../_lib/isgpay-config.js'
+import { settleIsgpayOrder } from '../../_lib/isgpay-settle.js'
 import { buildSaleRequest, generateTxnRefNo, inrToPaise } from '../../_lib/isgpay.js'
 import { logEvent } from '../../_lib/log.js'
 
@@ -22,6 +23,14 @@ import { logEvent } from '../../_lib/log.js'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const SLUG_RE = /^[a-z0-9-]{1,80}$/
 const MAX_SERVICES = 25
+
+/**
+ * A live order still pending after a hand-off may yet be approved by the bank
+ * (late callback, closed tab, no verdict). Until ISGPay confirms which response
+ * codes are final, such an attempt blocks a NEW live charge by the same shopper
+ * for one full day: past the callback retries and at least one reconcile run.
+ */
+export const UNRESOLVED_ATTEMPT_WINDOW_MS = 24 * 60 * 60 * 1000
 
 function enabledConfig(): IsgpayConfig | null {
   try {
@@ -52,7 +61,8 @@ function parseSlugs(value: unknown): string[] | null {
 
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   noStore(res)
-  const config = isgpayCheckoutOpen(req) ? enabledConfig() : null
+  const access = await isgpayCheckoutAccess(req)
+  const config = access.open ? enabledConfig() : null
 
   if (req.method === 'GET') {
     res.status(200).json({ available: config !== null, testMode: config?.env !== 'production' })
@@ -80,6 +90,34 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   if (!hasContact(contact)) {
     res.status(400).json({ error: 'contact_required' })
     return
+  }
+
+  // Never open a second live charge while an earlier one may still succeed.
+  // The earlier TxnRefNo stays untouched for investigation; a timeout or an
+  // unreadable answer is never taken to mean "it failed".
+  if (config.env === 'production') {
+    let earlier
+    try {
+      earlier = await findUnresolvedIsgpayOrder(guestToken, config.env, UNRESOLVED_ATTEMPT_WINDOW_MS)
+    } catch {
+      logEvent('isgpay.checkout.duplicate_check_failed')
+      res.status(502).json({ error: 'order_failed' })
+      return
+    }
+    if (earlier !== null) {
+      let resolved = false
+      try {
+        const result = await settleIsgpayOrder(config, earlier.reference)
+        resolved = ['paid', 'requires_review', 'already_settled'].includes(result.outcome)
+      } catch {
+        resolved = false
+      }
+      if (!resolved) {
+        logEvent('isgpay.checkout.blocked_unresolved', { txnRefNo: earlier.reference })
+        res.status(409).json({ error: 'payment_unresolved' })
+        return
+      }
+    }
   }
 
   const supabase = getServiceClient()
@@ -128,7 +166,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     res.status(502).json({ error: 'order_failed' })
     return
   }
-  logEvent('isgpay.checkout.initiated', { txnRefNo, env: config.env, amountPaise: handoff.amountPaise, services: slugs.length })
+  logEvent('isgpay.checkout.initiated', { txnRefNo, env: config.env, amountPaise: handoff.amountPaise, services: slugs.length, liveTester: access.liveTesterId })
 
   res.status(200).json({
     orderRef: txnRefNo,

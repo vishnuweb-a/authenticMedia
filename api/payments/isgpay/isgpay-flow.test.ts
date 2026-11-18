@@ -383,3 +383,60 @@ describe('environment separation (UAT <-> production)', () => {
     for (const secret of PRODUCTION_FIXTURE_SECRETS) expect(JSON.stringify(out)).not.toContain(secret)
   })
 })
+
+describe('guest payment return (no session cookie anywhere)', () => {
+  const guest = (query: Record<string, string>) => req({ method: 'GET', query })
+
+  it('a guest returning from a successful payment sees the paid result with the order token alone', async () => {
+    db.orders.set(REF, order({ status: 'paid', gatewayEnvironment: 'production' }))
+    const { res, out } = mockRes()
+    await status(guest({ ref: REF, t: 'tok-uuid' }), res)
+    expect(out.code).toBe(200)
+    expect(out.body).toMatchObject({ orderRef: REF, status: 'paid', settled: true, testMode: false })
+    expect(JSON.stringify(out.body)).not.toContain('tok-uuid')
+  })
+
+  it('a guest returning with an unresolved payment sees pending, and nothing is settled', async () => {
+    db.orders.set(REF, order())
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'))
+    const { res, out } = mockRes()
+    await status(guest({ ref: REF, t: 'tok-uuid' }), res)
+    fetchSpy.mockRestore()
+    expect(out.code).toBe(200)
+    expect(out.body).toMatchObject({ status: 'pending_payment', settled: false })
+    expect(db.rpc.filter((c) => c.fn === 'settle_isgpay_order')).toHaveLength(0)
+  })
+
+  it.each([['wrong token', 'tok-other'], ['empty token', ''], ['truncated token', 'tok-uu']])(
+    'a %s gets the same 404 as an unknown order and reveals nothing',
+    async (_name, t) => {
+      db.orders.set(REF, order())
+      const known = mockRes()
+      await status(guest({ ref: REF, t }), known.res)
+      const unknown = mockRes()
+      await status(guest({ ref: 'ISG0MFFFFFF0123456789ABCDEF', t: 'tok-uuid' }), unknown.res)
+      expect(known.out.code).toBe(404)
+      expect(known.out.body).toEqual(unknown.out.body)
+    },
+  )
+
+  it('an unsigned or malformed gateway callback is refused and settles nothing', async () => {
+    db.orders.set(REF, order())
+    const { res, out } = mockRes()
+    await callback(req({ method: 'POST', body: { EncData: 'bm90LXZhbGlk' } }), res)
+    expect(out.code).toBe(400)
+    expect(db.rpc).toHaveLength(0)
+  })
+
+  it('a record signed with the wrong secret is refused on return and never reveals the order token', async () => {
+    const config = loadIsgpayConfig()
+    db.orders.set(REF, order())
+    const forged = { ...gateway(config), SecureHash: 'AA'.repeat(32) }
+    const body = { EncData: encryptEncData(serializeEncData(Object.entries(forged)), config.secrets.encKey) }
+    const { res, out } = mockRes()
+    await ret(req({ method: 'POST', body }), res)
+    expect(out.headers['Location']).toBe('/order-success?status=unverified')
+    expect(out.headers['Location']).not.toContain('tok-uuid')
+    expect(db.rpc).toHaveLength(0)
+  })
+})

@@ -102,6 +102,18 @@ describe('createIsgpayPayment', () => {
   })
 })
 
+describe('unresolved earlier payment', () => {
+  it('a 409 from the server becomes a wait-and-do-not-pay-again message, never a hand-off', async () => {
+    stubFetch(() => new Response(JSON.stringify({ error: 'payment_unresolved' }), { status: 409 }))
+    const result = await createIsgpayPayment(INPUT)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('payment_unresolved')
+      expect(result.error.message).toMatch(/charged twice/)
+    }
+  })
+})
+
 describe('submitToIsgpay', () => {
   it('auto-submits a hidden POST form to the sandbox in THIS tab, fields verbatim', () => {
     const forms: Array<{ method: string; action: string; target: string; hidden: boolean; fields: Record<string, string> }> = []

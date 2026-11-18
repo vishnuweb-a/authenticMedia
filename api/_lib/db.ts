@@ -156,3 +156,53 @@ export async function findUnsettledOrders(
   if (error || !data) return []
   return data.map(toRecord)
 }
+
+/**
+ * ISGPay orders for ONE gateway environment still waiting for a verdict, oldest
+ * first. Legacy NULL = 'uat'. Never returns another environment's rows, and
+ * never an Airpay row (Airpay's findUnsettledOrders is unchanged).
+ */
+export async function findUnsettledIsgpayOrders(
+  env: IsgpayEnv,
+  minAgeMs: number,
+  maxAgeMs: number,
+  batchSize: number,
+): Promise<readonly OrderRecord[]> {
+  const now = Date.now()
+  let query = getServiceClient()
+    .from('orders')
+    .select(ORDER_COLUMNS)
+    .eq('payment_method', 'isgpay')
+    .eq('status', 'pending_payment')
+    .lte('created_at', new Date(now - minAgeMs).toISOString())
+    .gte('created_at', new Date(now - maxAgeMs).toISOString())
+  query = env === 'production' ? query.eq('gateway_environment', 'production') : query.or('gateway_environment.is.null,gateway_environment.eq.uat')
+  const { data, error } = await query.order('created_at', { ascending: true }).limit(batchSize).returns<OrderRow[]>()
+  if (error || !data) throw new Error('findUnsettledIsgpayOrders failed')
+  return data.map(toRecord)
+}
+
+/**
+ * The newest still-pending ISGPay order of this shopper (guest token) in this
+ * environment inside the window, or null. THROWS on a database error: the
+ * caller must treat "unknown" as "an earlier attempt may exist" and not charge.
+ */
+export async function findUnresolvedIsgpayOrder(
+  guestToken: string,
+  env: IsgpayEnv,
+  windowMs: number,
+): Promise<OrderRecord | null> {
+  const { data, error } = await getServiceClient()
+    .from('orders')
+    .select(ORDER_COLUMNS)
+    .eq('payment_method', 'isgpay')
+    .eq('guest_token', guestToken)
+    .eq('gateway_environment', env)
+    .eq('status', 'pending_payment')
+    .gte('created_at', new Date(Date.now() - windowMs).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .returns<OrderRow[]>()
+  if (error || !data) throw new Error('findUnresolvedIsgpayOrder failed')
+  return data[0] ? toRecord(data[0]) : null
+}

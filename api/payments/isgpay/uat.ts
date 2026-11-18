@@ -63,7 +63,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   let config
   try {
     config = loadIsgpayConfig()
-    if (!config.enabled) throw new Error('disabled')
+    // Sandbox-only page: it never creates a live order, whatever ISGPAY_ENV says.
+    if (!config.enabled || config.env !== 'uat') throw new Error('unavailable')
   } catch {
     logEvent('isgpay.uat.unavailable')
     sendPage(res, 503, 'ISGPay unavailable', '<p>ISGPay is not configured or not enabled on this deployment.</p>')
@@ -75,6 +76,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     p_service_slugs: [slug],
     p_order_ref: txnRefNo,
     p_guest_token: randomUUID(),
+    p_gateway_environment: 'uat',
+    p_contact_name: null,
+    p_contact_email: null,
+    p_contact_phone: null,
   })
   const row = (Array.isArray(data) ? data[0] : data) as { total_inr?: unknown; access_token?: unknown } | null
   if (error || typeof row?.total_inr !== 'number' || typeof row.access_token !== 'string') {

@@ -8,17 +8,15 @@ import { logEvent } from '../../_lib/log.js'
 
 /**
  * GET  /api/payments/isgpay/create → { available, testMode } for the checkout.
- * POST /api/payments/isgpay/create → a catalogue-priced UAT order + the
- *      encrypted hand-off the browser auto-posts to the ISGPay sandbox.
+ * POST /api/payments/isgpay/create → a catalogue-priced order + the encrypted
+ *      hand-off the browser auto-posts to the ISGPay hosted page.
  *
  * Same contract as /api/payments/create for Airpay: the body carries service
- * slugs, the guest token and contact details — never an amount, a credential
- * or a gateway URL. Every order made here is a SANDBOX order (ISGPAY_ENV is
- * UAT-only in loadIsgpayConfig), and the response says so (`testMode`).
- *
- * Contact details are validated for parity with Airpay but not stored:
- * create_isgpay_order has no contact columns, and a sandbox order is never
- * fulfilled.
+ * slugs, the guest token and contact details — never an amount, a credential,
+ * a gateway URL or an environment. The order is stamped server-side with
+ * ISGPAY_ENV (gateway_environment), and `testMode` is true unless that is
+ * 'production'. Contact details are stored, as for Airpay, so a production
+ * order can be fulfilled.
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -57,7 +55,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   const config = isgpayCheckoutOpen(req) ? enabledConfig() : null
 
   if (req.method === 'GET') {
-    res.status(200).json({ available: config !== null, testMode: true })
+    res.status(200).json({ available: config !== null, testMode: config?.env !== 'production' })
     return
   }
   if (req.method !== 'POST') {
@@ -78,7 +76,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     res.status(400).json({ error: 'invalid_request' })
     return
   }
-  if (!hasContact(normaliseContact(body?.['contact']))) {
+  const contact = normaliseContact(body?.['contact'])
+  if (!hasContact(contact)) {
     res.status(400).json({ error: 'contact_required' })
     return
   }
@@ -108,6 +107,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     p_service_slugs: slugs,
     p_order_ref: txnRefNo,
     p_guest_token: guestToken,
+    p_gateway_environment: config.env,
+    p_contact_name: `${contact.firstName} ${contact.lastName}`.trim() || null,
+    p_contact_email: contact.email || null,
+    p_contact_phone: contact.phone || null,
   })
   const row = (Array.isArray(data) ? data[0] : data) as { total_inr?: unknown; access_token?: unknown } | null
   if (error || typeof row?.total_inr !== 'number' || typeof row.access_token !== 'string') {
@@ -125,7 +128,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     res.status(502).json({ error: 'order_failed' })
     return
   }
-  logEvent('isgpay.checkout.initiated', { txnRefNo, amountPaise: handoff.amountPaise, services: slugs.length })
+  logEvent('isgpay.checkout.initiated', { txnRefNo, env: config.env, amountPaise: handoff.amountPaise, services: slugs.length })
 
   res.status(200).json({
     orderRef: txnRefNo,
@@ -133,6 +136,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     amount: row.total_inr,
     actionUrl: handoff.action,
     fields: handoff.fields,
-    testMode: true,
+    testMode: config.env !== 'production',
   })
 }

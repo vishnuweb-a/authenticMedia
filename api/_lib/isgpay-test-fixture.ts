@@ -1,5 +1,7 @@
 import { afterEach, beforeEach } from 'vitest'
 
+import { ISGPAY_ENDPOINTS, loadIsgpayConfig, type IsgpayConfig, type IsgpayEndpoints, type IsgpayEnv } from './isgpay-config.js'
+
 /** Synthetic ISGPay values for tests only. Never a real credential. */
 export const ISGPAY_FIXTURE: Readonly<Record<string, string>> = {
   ISGPAY_ENABLED: 'false',
@@ -16,6 +18,7 @@ export const ISGPAY_FIXTURE: Readonly<Record<string, string>> = {
   ISGPAY_STATUS_URL: 'https://sandbox.isgpay.com/ISGPay-Genius/Status',
   ISGPAY_RETURN_URL: 'https://authenticmedia.fun/api/payments/isgpay/return',
   ISGPAY_CALLBACK_URL: 'https://authenticmedia.fun/api/payments/isgpay/callback',
+  ISGPAY_PRODUCTION_LAUNCH_ENABLED: 'false',
 }
 
 export const FIXTURE_SECRETS: readonly string[] = [
@@ -40,4 +43,49 @@ export function installIsgpayEnv(): void {
       else process.env[key] = value
     }
   })
+}
+
+/**
+ * TEST-ONLY stand-in for a provider-confirmed production Status URL. The real
+ * table keeps production status null (unconfirmed) until ISGPay confirms it.
+ */
+export const CONFIRMED_TEST_ENDPOINTS: Readonly<Record<IsgpayEnv, IsgpayEndpoints>> = {
+  ...ISGPAY_ENDPOINTS,
+  production: { sale: ISGPAY_ENDPOINTS.production.sale, status: 'https://isgpay.com/ISGPay-Genius/Status' },
+}
+
+/** Synthetic production-shaped credentials: different from the UAT fixture, still fake. */
+export const PRODUCTION_FIXTURE: Readonly<Record<string, string>> = {
+  ISGPAY_ENV: 'production',
+  ISGPAY_BANK_ID: '000456',
+  ISGPAY_MERCHANT_ID: '200000000000002',
+  ISGPAY_TERMINAL_ID: '20000002',
+  ISGPAY_MCC: '7372',
+  ISGPAY_PASSCODE: 'PROD5678',
+  ISGPAY_SECURE_SECRET: 'F0E1D2C3B4A5968778695A4B3C2D1E0F',
+  ISGPAY_ENC_KEY: 'PRODKEY0PRODKEY1PRODKEY2PRODKEY3',
+  ISGPAY_SALE_URL: 'https://isgpay.com/ISGPay-Genius/request.action',
+  ISGPAY_STATUS_URL: 'https://isgpay.com/ISGPay-Genius/Status',
+}
+
+export const PRODUCTION_FIXTURE_SECRETS: readonly string[] = [
+  PRODUCTION_FIXTURE['ISGPAY_PASSCODE'] as string,
+  PRODUCTION_FIXTURE['ISGPAY_SECURE_SECRET'] as string,
+  PRODUCTION_FIXTURE['ISGPAY_ENC_KEY'] as string,
+]
+
+/**
+ * Switches the current test to the production fixture on the Vercel
+ * Production deployment. installIsgpayEnv() restores the ISGPAY_* keys after
+ * each test; the caller's beforeEach must reset VERCEL_ENV.
+ */
+export function setProductionEnv(): void {
+  Object.assign(process.env, PRODUCTION_FIXTURE)
+  process.env['VERCEL_ENV'] = 'production'
+}
+
+/** A production config as it will load once ISGPay confirms the Status URL. */
+export function productionConfig(): IsgpayConfig {
+  setProductionEnv()
+  return loadIsgpayConfig(CONFIRMED_TEST_ENDPOINTS)
 }

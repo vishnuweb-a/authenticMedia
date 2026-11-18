@@ -1,6 +1,6 @@
-import { findOrderByRef } from '../../_lib/db.js'
+import { findIsgpayGatewayEnvironment, findOrderByRef } from '../../_lib/db.js'
 import { noStore, safeEqual, type ApiRequest, type ApiResponse } from '../../_lib/http.js'
-import { loadIsgpayConfig } from '../../_lib/isgpay-config.js'
+import { loadIsgpayConfig, type IsgpayEnv } from '../../_lib/isgpay-config.js'
 import { settleIsgpayOrder, type IsgpaySettleResult } from '../../_lib/isgpay-settle.js'
 
 /**
@@ -9,6 +9,10 @@ import { settleIsgpayOrder, type IsgpaySettleResult } from '../../_lib/isgpay-se
  * Authoritative check: an unsettled ISGPay order is re-verified inline with a
  * Sale Status Query (same settleIsgpayOrder as return/callback). One
  * indistinguishable 404 for unknown order, wrong token or non-ISGPay order.
+ *
+ * `testMode` comes from the environment stored on the order row, never from
+ * the reference format or the current ISGPAY_ENV: only an order created under
+ * 'production' is reported as live. Unreadable → test (never a purchase).
  */
 
 function single(value: string | string[] | undefined): string {
@@ -41,6 +45,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return
   }
 
+  let environment: IsgpayEnv | null = null
+  try {
+    environment = await findIsgpayGatewayEnvironment(ref)
+  } catch {
+    environment = null
+  }
+
   let result: IsgpaySettleResult | null = null
   try {
     result = await settleIsgpayOrder(loadIsgpayConfig(), ref)
@@ -57,7 +68,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     createdAt: order.createdAt,
     verification: result ? { outcome: result.outcome, reason: result.reason, gateway: result.gateway } : null,
     settled: ['paid', 'failed', 'cancelled', 'delivered', 'requires_review'].includes(status),
-    // Every ISGPay order is UAT (loadIsgpayConfig accepts only ISGPAY_ENV=uat).
-    testMode: true,
+    testMode: environment !== 'production',
   })
 }

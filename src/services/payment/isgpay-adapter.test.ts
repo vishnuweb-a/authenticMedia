@@ -12,6 +12,7 @@ const {
   createIsgpayPayment,
   fetchIsgpayAvailability,
   fetchIsgpayOrderStatus,
+  ISGPAY_PRODUCTION_URL,
   ISGPAY_SANDBOX_URL,
   submitToIsgpay,
 } = await import('./isgpay-adapter')
@@ -160,15 +161,44 @@ describe('one click, one ISGPay order', () => {
 })
 
 describe('fetchIsgpayAvailability', () => {
-  it('true only for an explicit {available: true}', async () => {
-    stubFetch(() => respond({ available: true }))
-    expect(await fetchIsgpayAvailability()).toBe(true)
+  const NO = { available: false, testMode: true }
+
+  it('available only for an explicit {available: true}', async () => {
+    stubFetch(() => respond({ available: true, testMode: true }))
+    expect(await fetchIsgpayAvailability()).toEqual({ available: true, testMode: true })
     stubFetch(() => respond({ available: 'yes' }))
-    expect(await fetchIsgpayAvailability()).toBe(false)
+    expect(await fetchIsgpayAvailability()).toEqual(NO)
     stubFetch(() => respond({}, 500))
-    expect(await fetchIsgpayAvailability()).toBe(false)
+    expect(await fetchIsgpayAvailability()).toEqual(NO)
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline') }))
-    expect(await fetchIsgpayAvailability()).toBe(false)
+    expect(await fetchIsgpayAvailability()).toEqual(NO)
+  })
+
+  it('is live only on an explicit testMode: false; anything else is the sandbox', async () => {
+    stubFetch(() => respond({ available: true, testMode: false }))
+    expect(await fetchIsgpayAvailability()).toEqual({ available: true, testMode: false })
+    stubFetch(() => respond({ available: true }))
+    expect(await fetchIsgpayAvailability()).toEqual({ available: true, testMode: true })
+    stubFetch(() => respond({ available: true, testMode: 'false' }))
+    expect(await fetchIsgpayAvailability()).toEqual({ available: true, testMode: true })
+  })
+})
+
+describe('production hand-off pinning', () => {
+  it('accepts the live Sale URL only for a live (testMode false) order', async () => {
+    stubFetch(() => respond({ ...HANDOFF, testMode: false, actionUrl: ISGPAY_PRODUCTION_URL }))
+    const live = await createIsgpayPayment(INPUT)
+    expect(live.ok && live.data.actionUrl).toBe(ISGPAY_PRODUCTION_URL)
+    expect(live.ok && live.data.testMode).toBe(false)
+  })
+
+  it('refuses a mismatched mode/URL pair either way', async () => {
+    stubFetch(() => respond({ ...HANDOFF, testMode: true, actionUrl: ISGPAY_PRODUCTION_URL }))
+    expect((await createIsgpayPayment(INPUT)).ok).toBe(false)
+    stubFetch(() => respond({ ...HANDOFF, testMode: false, actionUrl: ISGPAY_SANDBOX_URL }))
+    expect((await createIsgpayPayment(INPUT)).ok).toBe(false)
+    stubFetch(() => respond({ ...HANDOFF, testMode: false, actionUrl: 'https://evil.example/request.action' }))
+    expect((await createIsgpayPayment(INPUT)).ok).toBe(false)
   })
 })
 
@@ -205,6 +235,16 @@ describe('fetchIsgpayOrderStatus', () => {
     const r = await run()
     expect(r?.state).toBe('declined')
     expect(r?.settled).toBe(true)
+  })
+
+  it('a production order (server testMode false) is not flagged as a test', async () => {
+    const { run } = status({ status: 'paid', settled: true, testMode: false })
+    expect((await run())?.testMode).toBe(false)
+  })
+
+  it('a missing testMode is treated as a sandbox test, never as a purchase', async () => {
+    const { run } = status({ status: 'paid', settled: true, testMode: undefined })
+    expect((await run())?.testMode).toBe(true)
   })
 
   it('amount mismatch surfaces as requires-review', async () => {

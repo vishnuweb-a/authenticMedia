@@ -73,7 +73,7 @@ describe('ISGPay configuration', () => {
   })
 
   describe('endpoints', () => {
-    it.each(['production', 'live', 'sandbox', ''])('rejects ISGPAY_ENV=%j', (value) => {
+    it.each(['production', 'live', 'sandbox', ''])('rejects ISGPAY_ENV=%j (production: not on this deployment / unconfirmed)', (value) => {
       process.env['ISGPAY_ENV'] = value
       expect(() => loadIsgpayConfig()).toThrow(/ISGPAY_ENV/)
     })

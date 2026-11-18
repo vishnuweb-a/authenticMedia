@@ -145,6 +145,15 @@ describe('create (POST)', () => {
     expect(call0?.fn).toBe('create_isgpay_order')
     expect(call0?.args['p_order_ref']).toBe(body['orderRef'])
     expect(call0?.args['p_guest_token']).toBe(GUEST)
+    expect(call0?.args['p_gateway_environment']).toBe('uat')
+    expect(call0?.args['p_contact_email']).toBe('test@example.com')
+  })
+
+  it('the production launch flag does not open the UAT sandbox to non-testers', async () => {
+    process.env['VERCEL_ENV'] = 'production'
+    process.env['ISGPAY_PRODUCTION_LAUNCH_ENABLED'] = 'true'
+    expect((await call({ method: 'GET' })).body).toMatchObject({ available: false })
+    expect((await post(validBody())).code).toBe(404)
   })
 
   it('prices from the database, ignoring any client amount', async () => {

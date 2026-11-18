@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 import { ConfigError } from './config.js'
+import type { IsgpayEnv } from './isgpay-config.js'
 
 /**
  * Server-side Supabase access (AIPAY-DOCS §17, AGENTS.md §30.8).
@@ -81,6 +82,25 @@ export async function findOrderByRef(orderRef: string): Promise<OrderRecord | nu
 
   if (error || !data) return null
   return toRecord(data)
+}
+
+/**
+ * The gateway environment an ISGPay order was CREATED under, from our own row.
+ * NULL is a pre-production legacy row, created when only UAT existed → 'uat'.
+ * null = not an ISGPay order, unreadable, or an unknown value: callers fail closed.
+ *
+ * Separate from findOrderByRef so Airpay reads never depend on this column.
+ */
+export async function findIsgpayGatewayEnvironment(orderRef: string): Promise<IsgpayEnv | null> {
+  const { data, error } = await getServiceClient()
+    .from('orders')
+    .select('payment_method, gateway_environment')
+    .eq('reference', orderRef)
+    .maybeSingle<{ payment_method: string; gateway_environment: string | null }>()
+
+  if (error || !data || data.payment_method !== 'isgpay') return null
+  const env = data.gateway_environment ?? 'uat'
+  return env === 'uat' || env === 'production' ? env : null
 }
 
 /**

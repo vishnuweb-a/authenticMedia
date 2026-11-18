@@ -1,5 +1,5 @@
-import { getServiceClient, findOrderByRef } from './db.js'
-import type { IsgpayConfig } from './isgpay-config.js'
+import { findIsgpayGatewayEnvironment, findOrderByRef, getServiceClient } from './db.js'
+import type { IsgpayConfig, IsgpayEnv } from './isgpay-config.js'
 import { evaluateTransaction, inrToPaise, ISG_TXN_REF_RE, querySaleStatus, type StatusResult } from './isgpay.js'
 import { logEvent } from './log.js'
 
@@ -13,6 +13,11 @@ import { logEvent } from './log.js'
  *
  * Decline policy is undecided (docs §10, Q9), so a verified non-"00" leaves the
  * order pending: fail closed in both directions.
+ *
+ * An order is only ever verified with the credentials of the environment it
+ * was created under (orders.gateway_environment). A UAT order is never queried
+ * with production keys, nor the reverse: it stays pending (drain-and-cutover,
+ * docs/ISGPAY-PRODUCTION-READINESS.md §9).
  */
 
 const TERMINAL = new Set(['paid', 'failed', 'cancelled', 'delivered', 'requires_review'])
@@ -46,18 +51,26 @@ export interface IsgpaySettleResult {
 
 export interface IsgpaySettleDeps {
   readonly query?: (config: IsgpayConfig, txnRefNo: string) => Promise<StatusResult>
-  readonly settleRow?: (orderRef: string, status: 'succeeded' | 'requires_review', gatewayRef: string | null) => Promise<string | null>
+  readonly environmentOf?: (orderRef: string) => Promise<IsgpayEnv | null>
+  readonly settleRow?: (
+    orderRef: string,
+    status: 'succeeded' | 'requires_review',
+    gatewayRef: string | null,
+    environment: IsgpayEnv,
+  ) => Promise<string | null>
 }
 
 export async function settleIsgpayRow(
   orderRef: string,
   paymentStatus: 'succeeded' | 'requires_review',
   gatewayRef: string | null,
+  environment: IsgpayEnv,
 ): Promise<string | null> {
   const { data, error } = await getServiceClient().rpc('settle_isgpay_order', {
     p_order_ref: orderRef,
     p_payment_status: paymentStatus,
     p_gateway_ref: gatewayRef,
+    p_gateway_environment: environment,
   })
   if (error) throw new Error(`settle_isgpay_order failed: ${error.code ?? 'unknown'}`)
   return typeof data === 'string' ? data : null
@@ -70,6 +83,7 @@ export async function settleIsgpayOrder(
 ): Promise<IsgpaySettleResult> {
   const query = deps.query ?? querySaleStatus
   const settleRow = deps.settleRow ?? settleIsgpayRow
+  const environmentOf = deps.environmentOf ?? findIsgpayGatewayEnvironment
   const base = { orderRef: txnRefNo }
 
   if (!ISG_TXN_REF_RE.test(txnRefNo)) return { ...base, outcome: 'unknown_order', status: null, amountInr: null }
@@ -81,6 +95,12 @@ export async function settleIsgpayOrder(
   }
   const amountInr = order.totalInr
   if (TERMINAL.has(order.status)) return { ...base, outcome: 'already_settled', status: order.status, amountInr }
+
+  const environment = await environmentOf(txnRefNo)
+  if (environment !== config.env) {
+    logEvent('isgpay.settle.environment_mismatch', { txnRefNo, order: environment ?? 'unknown', config: config.env })
+    return { ...base, outcome: 'pending', status: order.status, amountInr, reason: 'environment_mismatch' }
+  }
 
   const status = await query(config, txnRefNo)
   if (status.kind !== 'verified') {
@@ -107,7 +127,7 @@ export async function settleIsgpayOrder(
 
   if (verdict.outcome === 'success' || verdict.outcome === 'mismatch') {
     const target = verdict.outcome === 'success' ? 'succeeded' : 'requires_review'
-    const settledId = await settleRow(txnRefNo, target, gatewayRef)
+    const settledId = await settleRow(txnRefNo, target, gatewayRef, config.env)
     if (!settledId) return { ...base, outcome: 'already_settled', status: null, amountInr, gateway }
     const outcome = verdict.outcome === 'success' ? 'paid' : 'requires_review'
     logEvent(`isgpay.settled.${outcome}`, { txnRefNo })

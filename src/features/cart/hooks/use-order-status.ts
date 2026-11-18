@@ -39,8 +39,11 @@ export function useOrderStatus(
 ): UseOrderStatusResult {
   const [state, setState] = useState<OrderPaymentState>('checking')
   const [amount, setAmount] = useState(0)
-  // From the reference format alone, so the sandbox label shows from the first render.
-  const testMode = orderRef !== null && ISGPAY_REF_RE.test(orderRef)
+  // ISGPay references look the same in UAT and production, so the format only
+  // says "possibly a test". The server's answer (stored order environment)
+  // replaces it; until then an ISGPay order is labelled a test, never a purchase.
+  const [reportedTestMode, setReportedTestMode] = useState<boolean | null>(null)
+  const testMode = reportedTestMode ?? (orderRef !== null && ISGPAY_REF_RE.test(orderRef))
 
   useEffect(() => {
     if (!orderRef || !accessToken) return
@@ -61,6 +64,7 @@ export function useOrderStatus(
 
         if (result) {
           setAmount(result.amount)
+          setReportedTestMode(result.testMode ?? false)
           // 'settled' includes requires_review: the shopper should stop seeing
           // a spinner even though the order is not finished — it waits on a
           // human, and no amount of polling will change it.

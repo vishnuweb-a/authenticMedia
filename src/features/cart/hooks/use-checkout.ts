@@ -34,8 +34,10 @@ export interface UseCheckoutResult {
    */
   gateway: CheckoutGateway
   setGateway: (gateway: CheckoutGateway) => void
-  /** Whether the server offers the ISGPay sandbox to this browser. */
+  /** Whether the server offers ISGPay to this browser. */
   isgpayAvailable: boolean
+  /** Server-reported: ISGPay is the UAT sandbox (true) or live production (false). */
+  isgpayTestMode: boolean
   /** Terms acceptance. Unticked by default; payment cannot start without it. */
   termsAccepted: boolean
   setTermsAccepted: (accepted: boolean) => void
@@ -105,6 +107,7 @@ export function useCheckout(): UseCheckoutResult {
   // shopper who changes nothing gets the flow that has always worked.
   const [selectedGateway, setGateway] = useState<CheckoutGateway>(DEFAULT_GATEWAY)
   const [isgpayAvailable, setIsgpayAvailable] = useState(false)
+  const [isgpayTestMode, setIsgpayTestMode] = useState(true)
   const [termsAccepted, setTermsAcceptedState] = useState(false)
   const [termsError, setTermsError] = useState<string | null>(null)
   const [awaiting, setAwaiting] = useState<UseCheckoutResult['awaiting']>(null)
@@ -112,8 +115,10 @@ export function useCheckout(): UseCheckoutResult {
   // Server decides (feature flag + tester cookie). Until it answers: hidden.
   useEffect(() => {
     let cancelled = false
-    void fetchIsgpayAvailability().then((available) => {
-      if (!cancelled) setIsgpayAvailable(available)
+    void fetchIsgpayAvailability().then(({ available, testMode }) => {
+      if (cancelled) return
+      setIsgpayAvailable(available)
+      setIsgpayTestMode(testMode)
     })
     return () => {
       cancelled = true
@@ -291,6 +296,7 @@ export function useCheckout(): UseCheckoutResult {
     gateway,
     setGateway,
     isgpayAvailable,
+    isgpayTestMode,
     termsAccepted,
     setTermsAccepted,
     termsError,

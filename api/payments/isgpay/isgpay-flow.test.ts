@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiRequest, ApiResponse } from '../../_lib/http.js'
 import { loadIsgpayConfig, type IsgpayConfig } from '../../_lib/isgpay-config.js'
 import { computeSecureHash, encryptEncData, serializeEncData, verifyFields, type VerifiedIsgpayFields } from '../../_lib/isgpay-crypto.js'
-import { installIsgpayEnv } from '../../_lib/isgpay-test-fixture.js'
+import { installIsgpayEnv, productionConfig, PRODUCTION_FIXTURE_SECRETS } from '../../_lib/isgpay-test-fixture.js'
 import type { StatusResult } from '../../_lib/isgpay.js'
 
 const db = vi.hoisted(() => ({
@@ -13,6 +13,11 @@ const db = vi.hoisted(() => ({
 
 vi.mock('../../_lib/db.js', () => ({
   findOrderByRef: async (ref: string) => db.orders.get(ref) ?? null,
+  // Mirrors db.ts: NULL (legacy) -> 'uat'; non-ISGPay -> null.
+  findIsgpayGatewayEnvironment: async (ref: string) => {
+    const o = db.orders.get(ref)
+    return o?.['paymentMethod'] === 'isgpay' ? ((o['gatewayEnvironment'] as string | null | undefined) ?? 'uat') : null
+  },
   getServiceClient: () => ({
     rpc: async (fn: string, args: Record<string, unknown>) => {
       db.rpc.push({ fn, args })
@@ -94,7 +99,7 @@ describe('settleIsgpayOrder', () => {
     const settleRow = vi.fn(async () => 'id')
     const r = await settleIsgpayOrder(config, REF, { query: async () => verifiedStatus(config), settleRow })
     expect(r.outcome).toBe('paid')
-    expect(settleRow).toHaveBeenCalledWith(REF, 'succeeded', 'PG123')
+    expect(settleRow).toHaveBeenCalledWith(REF, 'succeeded', 'PG123', 'uat')
   })
 
   it('amount mismatch → requires_review, never paid', async () => {
@@ -103,7 +108,7 @@ describe('settleIsgpayOrder', () => {
     const settleRow = vi.fn(async () => 'id')
     const r = await settleIsgpayOrder(config, REF, { query: async () => verifiedStatus(config, { Amount: '100' }), settleRow })
     expect(r.outcome).toBe('requires_review')
-    expect(settleRow).toHaveBeenCalledWith(REF, 'requires_review', 'PG123')
+    expect(settleRow).toHaveBeenCalledWith(REF, 'requires_review', 'PG123', 'uat')
   })
 
   it.each([
@@ -250,11 +255,18 @@ describe('sandbox isolation', () => {
     expect((out.body as { status: string }).status).toBe('pending_payment')
   })
 
-  it('ISGPay status always flags its orders as test mode', async () => {
-    db.orders.set(REF, order({ status: 'paid' }))
+  it.each([undefined, null, 'uat'])('a UAT order (stored env %j) is always test mode, even when paid', async (env) => {
+    db.orders.set(REF, order({ status: 'paid', gatewayEnvironment: env }))
     const { res, out } = mockRes()
     await status(req({ method: 'GET', query: { ref: REF, t: 'tok-uuid' } }), res)
     expect(out.body).toMatchObject({ status: 'paid', testMode: true })
+  })
+
+  it('a production order is NOT reported as a sandbox test', async () => {
+    db.orders.set(REF, order({ status: 'paid', gatewayEnvironment: 'production' }))
+    const { res, out } = mockRes()
+    await status(req({ method: 'GET', query: { ref: REF, t: 'tok-uuid' } }), res)
+    expect(out.body).toMatchObject({ status: 'paid', testMode: false })
   })
 })
 
@@ -268,5 +280,106 @@ describe('preview return host', () => {
     process.env['VERCEL_BRANCH_URL'] = 'other.vercel.app'
     expect(() => loadIsgpayConfig()).toThrow()
     delete process.env['VERCEL_BRANCH_URL']
+  })
+})
+
+describe('environment separation (UAT <-> production)', () => {
+  it('an in-flight UAT order is never verified with production keys', async () => {
+    const config = productionConfig()
+    db.orders.set(REF, order({ gatewayEnvironment: null })) // legacy UAT row
+    const query = vi.fn()
+    const settleRow = vi.fn(async () => 'id')
+    const r = await settleIsgpayOrder(config, REF, { query, settleRow })
+    expect(r).toMatchObject({ outcome: 'pending', reason: 'environment_mismatch' })
+    expect(query).not.toHaveBeenCalled()
+    expect(settleRow).not.toHaveBeenCalled()
+  })
+
+  it('a production order is never verified with UAT keys', async () => {
+    const config = loadIsgpayConfig()
+    db.orders.set(REF, order({ gatewayEnvironment: 'production' }))
+    const query = vi.fn()
+    const r = await settleIsgpayOrder(config, REF, { query })
+    expect(r).toMatchObject({ outcome: 'pending', reason: 'environment_mismatch' })
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it('an unknown environment fails closed', async () => {
+    const config = loadIsgpayConfig()
+    db.orders.set(REF, order())
+    const query = vi.fn()
+    const r = await settleIsgpayOrder(config, REF, { query, environmentOf: async () => null })
+    expect(r.reason).toBe('environment_mismatch')
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it('a production order settles with production keys, pinned to production in SQL', async () => {
+    const config = productionConfig()
+    db.orders.set(REF, order({ gatewayEnvironment: 'production' }))
+    const settleRow = vi.fn(async () => 'id')
+    const r = await settleIsgpayOrder(config, REF, { query: async () => verifiedStatus(config), settleRow })
+    expect(r.outcome).toBe('paid')
+    expect(settleRow).toHaveBeenCalledWith(REF, 'succeeded', 'PG123', 'production')
+  })
+
+  it('a record signed with the UAT secret does not verify, and UAT ids never settle a production order as paid', async () => {
+    const uatConfig = loadIsgpayConfig()
+    const signedWithUat = gateway(uatConfig)
+    const config = productionConfig()
+    expect(verifyFields(signedWithUat, config.secrets.secureSecret).ok).toBe(false)
+    db.orders.set(REF, order({ gatewayEnvironment: 'production' }))
+    const settleRow = vi.fn(async () => 'id')
+    const r = await settleIsgpayOrder(config, REF, { query: async () => verifiedStatus(uatConfig), settleRow })
+    expect(r.outcome).toBe('requires_review')
+    expect(settleRow).not.toHaveBeenCalledWith(REF, 'succeeded', expect.anything(), expect.anything())
+  })
+
+  it('repeated callbacks cannot double-settle', async () => {
+    const config = loadIsgpayConfig()
+    db.orders.set(REF, order())
+    let settled = false
+    const settleRow = vi.fn(async () => {
+      if (settled) return null
+      settled = true
+      return 'id'
+    })
+    const query = async () => verifiedStatus(config)
+    const first = await settleIsgpayOrder(config, REF, { query, settleRow })
+    const second = await settleIsgpayOrder(config, REF, { query, settleRow }) // concurrent duplicate
+    expect(first.outcome).toBe('paid')
+    expect(second.outcome).toBe('already_settled')
+    db.orders.set(REF, order({ status: 'paid' }))
+    const spy = vi.fn()
+    expect((await settleIsgpayOrder(config, REF, { query: spy, settleRow })).outcome).toBe('already_settled')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('the sandbox UAT page refuses to create an order under ISGPAY_ENV=production', async () => {
+    productionConfig()
+    process.env['ISGPAY_UAT_ACCESS_KEY'] = 'k'.repeat(32)
+    process.env['ISGPAY_UAT_WEBSITE_TEST_ENABLED'] = 'true'
+    process.env['ISGPAY_ENABLED'] = 'true'
+    const { res, out } = mockRes()
+    await uat(req({ method: 'POST', body: { key: 'k'.repeat(32), slug: 'website-security-audit' } }), res)
+    expect(out.code).toBe(503)
+    expect(db.rpc).toHaveLength(0)
+  })
+
+  it('the UAT page stamps its orders as uat', async () => {
+    process.env['ISGPAY_UAT_ACCESS_KEY'] = 'k'.repeat(32)
+    process.env['ISGPAY_ENABLED'] = 'true'
+    const { res } = mockRes()
+    await uat(req({ method: 'POST', body: { key: 'k'.repeat(32), slug: 'website-security-audit' } }), res)
+    expect(db.rpc[0]?.args['p_gateway_environment']).toBe('uat')
+  })
+
+  it('with the real endpoint table, production handlers fail closed and leak nothing', async () => {
+    const config = productionConfig()
+    db.orders.set(REF, order({ gatewayEnvironment: 'production' }))
+    const { res, out } = mockRes()
+    await callback(req({ method: 'POST', body: { EncData: envelope(config) } }), res)
+    expect(out.code).toBe(503) // production Status URL unconfirmed → config refuses to load
+    expect(db.rpc).toHaveLength(0)
+    for (const secret of PRODUCTION_FIXTURE_SECRETS) expect(JSON.stringify(out)).not.toContain(secret)
   })
 })

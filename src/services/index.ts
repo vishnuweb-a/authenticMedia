@@ -25,6 +25,7 @@ export {
   fetchIsgpayOrderStatus,
   fetchOrderStatus,
   ISGPAY_REF_RE,
+  ISGPAY_PRODUCTION_URL,
   ISGPAY_SANDBOX_URL,
   openPaymentWindow,
   PAYMENT_WINDOW_NAME,

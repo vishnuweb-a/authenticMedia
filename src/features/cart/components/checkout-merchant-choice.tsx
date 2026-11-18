@@ -5,15 +5,21 @@ import type { CheckoutGateway } from '../types/cart.types'
 
 export interface CheckoutMerchantChoiceProps {
   value: CheckoutGateway
-  /** Server-decided; when false the sandbox radio is not rendered at all. */
+  /** Server-decided; when false the ISGPay radio is not rendered at all. */
   isgpayAvailable?: boolean
+  /**
+   * Server-decided. Defaults to true: only an explicit live (false) answer
+   * drops the sandbox label and warning.
+   */
+  isgpayTestMode?: boolean
   disabled?: boolean
   onChange: (gateway: CheckoutGateway) => void
 }
 
 /**
- * The two Airpay payment options (AIPAY-DOCS §2.4), plus the ISGPay sandbox
- * radio when the server offers it to this browser.
+ * The two Airpay payment options (AIPAY-DOCS §2.4), plus the ISGPay radio
+ * when the server offers it to this browser — labelled as a sandbox test
+ * unless the server reports the approved production release.
  *
  * ⚠ Native radios in a single `name` group, so the browser itself enforces
  * that exactly one is chosen: there is no state in which both are selected and
@@ -57,6 +63,9 @@ const OPTIONS: ReadonlyArray<{
   },
 ]
 
+/** Shown only when the server reports live (production) ISGPay. */
+const ISGPAY_LIVE_LABEL = 'Pay with ISGPay'
+
 function keyOf(gateway: CheckoutGateway): string {
   return gateway.kind === 'isgpay' ? 'isgpay' : String(gateway.merchant)
 }
@@ -64,12 +73,15 @@ function keyOf(gateway: CheckoutGateway): string {
 export function CheckoutMerchantChoice({
   value,
   isgpayAvailable = false,
+  isgpayTestMode = true,
   disabled,
   onChange,
 }: CheckoutMerchantChoiceProps) {
   const groupName = useId()
   const selectedKey = keyOf(value)
-  const options = OPTIONS.filter((o) => isgpayAvailable || o.gateway.kind !== 'isgpay')
+  const options = OPTIONS.filter((o) => isgpayAvailable || o.gateway.kind !== 'isgpay').map((o) =>
+    o.gateway.kind === 'isgpay' && !isgpayTestMode ? { ...o, label: ISGPAY_LIVE_LABEL, note: undefined } : o,
+  )
 
   return (
     <fieldset disabled={disabled} className="min-w-0">

@@ -151,6 +151,19 @@ describe('ISGPay sandbox option', () => {
   })
 })
 
+describe('ISGPay production label', () => {
+  it('stays a sandbox label unless the server explicitly reports live', () => {
+    expect(render({ isgpayAvailable: true })).toContain('Pay with ISGPay — Sandbox Test')
+    expect(render({ isgpayAvailable: true, isgpayTestMode: true })).toContain('Sandbox Test')
+  })
+
+  it('reads simply "Pay with ISGPay", with no sandbox warning, for an approved live release', () => {
+    const markup = render({ isgpayAvailable: true, isgpayTestMode: false })
+    expect(markup).toContain('Pay with ISGPay')
+    expect(markup).not.toMatch(/Sandbox|No real money moves/)
+  })
+})
+
 describe('the browser is told nothing it should not know', () => {
   it('leaks no MID, credential, gateway URL or internal detail', () => {
     const markup = render({ value: airpay(2) }).toLowerCase()

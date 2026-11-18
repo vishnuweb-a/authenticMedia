@@ -2,7 +2,8 @@
  * Server-side ISGPay (In-Solutions Global, NG Redirection, non-PCI) configuration.
  *
  * Source of truth: ISGPay NG Redirection Non-PCI API Specification v1.6 and the
- * merchant onboarding email. See docs/ISGPAY-UAT-PHASE1.md.
+ * merchant onboarding email. See docs/ISGPAY-UAT-PHASE1.md and
+ * docs/ISGPAY-PRODUCTION-READINESS.md (UAT vs production).
  *
  * Entirely separate from the Airpay configuration in config.ts: no variable,
  * type or function is shared, so nothing here can change an Airpay merchant.
@@ -18,20 +19,33 @@ import { ConfigError } from './config.js'
 
 export { ConfigError }
 
-export type IsgpayEnv = 'uat'
+export type IsgpayEnv = 'uat' | 'production'
+
+export interface IsgpayEndpoints {
+  readonly sale: string
+  /** null = not confirmed by ISGPay for this merchant → that env fails closed. */
+  readonly status: string | null
+}
 
 /**
  * The only gateway URLs this code will ever talk to. Caller- or env-supplied
- * URLs must equal one of these exactly; they are never used to choose a host.
+ * URLs must equal one of these exactly; they are never used to choose a host,
+ * and nothing from a request ever selects an environment.
  *
- * Production is deliberately absent: v1.6 §8.4 gives only `https://<domain>/…`
- * and no production host has been confirmed for this merchant. ISGPAY_ENV
- * other than `uat` therefore fails closed (UNCONFIRMED, docs §Open questions).
+ * Production Sale is the host recorded in the ISGPay production-migration
+ * guide (PROPOSED, pending merchant confirmation). Production Status is null:
+ * its URL and transport are unconfirmed, and settlement depends on it, so
+ * ISGPAY_ENV=production cannot load until a reviewed code change sets it.
+ * See docs/ISGPAY-PRODUCTION-READINESS.md.
  */
-export const ISGPAY_ENDPOINTS: Readonly<Record<IsgpayEnv, { readonly sale: string; readonly status: string }>> = {
+export const ISGPAY_ENDPOINTS: Readonly<Record<IsgpayEnv, IsgpayEndpoints>> = {
   uat: {
     sale: 'https://sandbox.isgpay.com/ISGPay-Genius/request.action',
     status: 'https://sandbox.isgpay.com/ISGPay-Genius/Status',
+  },
+  production: {
+    sale: 'https://isgpay.com/ISGPay-Genius/request.action',
+    status: null,
   },
 }
 
@@ -171,14 +185,23 @@ function readEnabled(): boolean {
  *
  * Field rules come from v1.6 §3.1.1 / §3.2.1 lengths and types.
  */
-export function loadIsgpayConfig(): IsgpayConfig {
+export function loadIsgpayConfig(endpointTable: Readonly<Record<IsgpayEnv, IsgpayEndpoints>> = ISGPAY_ENDPOINTS): IsgpayConfig {
   const enabled = readEnabled()
 
   const env = read('ISGPAY_ENV').toLowerCase()
-  if (env !== 'uat') {
-    throw new ConfigError('ISGPAY_ENV must be "uat" (production endpoints are not yet confirmed)')
+  if (env !== 'uat' && env !== 'production') {
+    throw new ConfigError('ISGPAY_ENV must be "uat" or "production"')
   }
-  const endpoints = ISGPAY_ENDPOINTS[env]
+  // Live credentials belong to the Production deployment only: a Preview or
+  // local run that inherits them refuses to start rather than take real money.
+  if (env === 'production' && process.env['VERCEL_ENV'] !== 'production') {
+    throw new ConfigError('ISGPAY_ENV=production is allowed only on the Vercel Production deployment')
+  }
+  const endpoints = endpointTable[env]
+  const statusEndpoint = endpoints.status
+  if (statusEndpoint === null) {
+    throw new ConfigError(`ISGPAY_ENV=${env}: the Status endpoint is not confirmed by ISGPay`)
+  }
 
   requiredMatching('ISGPAY_CURRENCY', /^356$/, '356 (INR)')
   const returnUrl = ownUrl('ISGPAY_RETURN_URL', true)
@@ -194,7 +217,7 @@ export function loadIsgpayConfig(): IsgpayConfig {
     mcc: requiredMatching('ISGPAY_MCC', /^\d{4}$/, '4 digits'),
     currency: '356',
     saleUrl: pinnedUrl('ISGPAY_SALE_URL', endpoints.sale),
-    statusUrl: pinnedUrl('ISGPAY_STATUS_URL', endpoints.status),
+    statusUrl: pinnedUrl('ISGPAY_STATUS_URL', statusEndpoint),
     returnUrl,
     callbackUrl: ownUrl('ISGPAY_CALLBACK_URL', false),
     secrets: new IsgpaySecrets(

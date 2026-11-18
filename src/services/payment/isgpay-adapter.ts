@@ -4,13 +4,15 @@ import type { ServiceResult } from '@/services/result'
 import { submitToAirpay, type OrderPaymentState, type OrderStatusResult } from './airpay-adapter'
 
 /**
- * The ISGPay (UAT sandbox) frontend seam. Holds no credential and performs no
- * cryptography: /api/payments/isgpay/create prices the basket, creates the
- * order and returns already-encrypted fields, which are posted verbatim.
+ * The ISGPay frontend seam (UAT sandbox or production, as the SERVER decides).
+ * Holds no credential and performs no cryptography:
+ * /api/payments/isgpay/create prices the basket, creates the order and returns
+ * already-encrypted fields, which are posted verbatim.
  */
 
-/** The only page this browser will ever post ISGPay fields to. */
+/** The only pages this browser will ever post ISGPay fields to. */
 export const ISGPAY_SANDBOX_URL = 'https://sandbox.isgpay.com/ISGPay-Genius/request.action'
+export const ISGPAY_PRODUCTION_URL = 'https://isgpay.com/ISGPay-Genius/request.action'
 
 /** ISGPay order references (server-generated): ISG + 24 upper-case chars. */
 export const ISGPAY_REF_RE = /^ISG[0-9A-Z]{8}[0-9A-F]{16}$/
@@ -19,8 +21,16 @@ export interface IsgpayHandoff {
   readonly orderRef: string
   readonly accessToken: string
   readonly amount: number
-  readonly actionUrl: typeof ISGPAY_SANDBOX_URL
+  readonly actionUrl: typeof ISGPAY_SANDBOX_URL | typeof ISGPAY_PRODUCTION_URL
   readonly fields: Readonly<Record<string, string>>
+  /** Sandbox order: never shown as a purchase. */
+  readonly testMode: boolean
+}
+
+export interface IsgpayAvailability {
+  readonly available: boolean
+  /** Server-reported. Anything but an explicit `false` is treated as sandbox. */
+  readonly testMode: boolean
 }
 
 export interface CreateIsgpayPaymentInput {
@@ -33,21 +43,23 @@ export interface CreateIsgpayPaymentInput {
   }
 }
 
-const UNAVAILABLE = 'The ISGPay sandbox is unavailable right now. Please try again shortly.'
+const UNAVAILABLE = 'ISGPay is unavailable right now. Please try again shortly.'
 
-/** Whether the server offers ISGPay to THIS browser. Any failure means no. */
-export async function fetchIsgpayAvailability(): Promise<boolean> {
+const NOT_AVAILABLE: IsgpayAvailability = { available: false, testMode: true }
+
+/** Whether the server offers ISGPay to THIS browser, and in which mode. Any failure means no. */
+export async function fetchIsgpayAvailability(): Promise<IsgpayAvailability> {
   try {
     const response = await fetch('/api/payments/isgpay/create', { headers: { Accept: 'application/json' } })
-    if (!response.ok) return false
-    const data = (await response.json()) as { available?: unknown }
-    return data.available === true
+    if (!response.ok) return NOT_AVAILABLE
+    const data = (await response.json()) as { available?: unknown; testMode?: unknown }
+    return data.available === true ? { available: true, testMode: data.testMode !== false } : NOT_AVAILABLE
   } catch {
-    return false
+    return NOT_AVAILABLE
   }
 }
 
-/** Creates the UAT order server-side. No amount is sent. */
+/** Creates the order server-side. No amount is sent. */
 export async function createIsgpayPayment(
   input: CreateIsgpayPaymentInput,
 ): Promise<ServiceResult<IsgpayHandoff>> {
@@ -65,13 +77,16 @@ export async function createIsgpayPayment(
 
     const data = (await response.json()) as Partial<Record<keyof IsgpayHandoff, unknown>>
     const fields = data.fields
+    const testMode = data.testMode !== false
+    // The sandbox page for a test order, the live page only for a live one.
+    const expectedAction = testMode ? ISGPAY_SANDBOX_URL : ISGPAY_PRODUCTION_URL
     if (
       typeof data.orderRef !== 'string' ||
       !ISGPAY_REF_RE.test(data.orderRef) ||
       typeof data.accessToken !== 'string' ||
       typeof data.amount !== 'number' ||
       // Never post to a host the server did not pin, even if a response says so.
-      data.actionUrl !== ISGPAY_SANDBOX_URL ||
+      data.actionUrl !== expectedAction ||
       fields === null ||
       typeof fields !== 'object' ||
       !Object.values(fields).every((v) => typeof v === 'string')
@@ -83,8 +98,9 @@ export async function createIsgpayPayment(
       orderRef: data.orderRef,
       accessToken: data.accessToken,
       amount: data.amount,
-      actionUrl: ISGPAY_SANDBOX_URL,
+      actionUrl: expectedAction,
       fields: fields as Record<string, string>,
+      testMode,
     })
   } catch {
     return err<IsgpayHandoff>('offline', UNAVAILABLE)
@@ -117,6 +133,7 @@ export async function fetchIsgpayOrderStatus(
     amountInr?: number
     settled?: boolean
     verification?: { outcome?: string } | null
+    testMode?: boolean
   }
   const declined = data.verification?.outcome === 'declined_pending'
   const state: OrderPaymentState =
@@ -136,6 +153,7 @@ export async function fetchIsgpayOrderStatus(
     amount: typeof data.amountInr === 'number' ? data.amountInr : 0,
     // A verified decline stops the spinner; the row itself stays pending.
     settled: Boolean(data.settled) || declined,
-    testMode: true,
+    // From the stored order environment; only an explicit false is live.
+    testMode: data.testMode !== false,
   }
 }

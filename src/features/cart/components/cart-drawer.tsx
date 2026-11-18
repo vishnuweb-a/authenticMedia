@@ -34,6 +34,7 @@ export function CartDrawer() {
     gateway,
     setGateway,
     isgpayAvailable,
+    isgpayTestMode,
     termsAccepted,
     setTermsAccepted,
     termsError,
@@ -120,6 +121,7 @@ export function CartDrawer() {
               <CheckoutMerchantChoice
                 value={gateway}
                 isgpayAvailable={isgpayAvailable}
+                isgpayTestMode={isgpayTestMode}
                 disabled={status === 'pending'}
                 onChange={setGateway}
               />

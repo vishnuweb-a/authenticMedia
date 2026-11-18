@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { REFUND } from '@/features/legal/content/refund'
+import { SERVICE_DELIVERY } from '@/features/legal/content/service-delivery'
+import { TERMS } from '@/features/legal/content/terms'
 import { LEGAL } from './site'
 
 /**
@@ -71,10 +74,7 @@ describe('Grievance page follows LEGAL', () => {
 })
 
 describe('every policy escalates through the Grievance Redressal page', () => {
-  it('no policy tells the customer to escalate to the same inbox, and each links /grievance-redressal', async () => {
-    const { TERMS } = await import('@/features/legal/content/terms')
-    const { REFUND } = await import('@/features/legal/content/refund')
-    const { SERVICE_DELIVERY } = await import('@/features/legal/content/service-delivery')
+  it('no policy tells the customer to escalate to the same inbox, and each links /grievance-redressal', () => {
     for (const doc of [TERMS, REFUND, SERVICE_DELIVERY]) {
       const body = JSON.stringify(doc.sections)
       expect(body).not.toMatch(/escalate to the same address/i)

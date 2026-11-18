@@ -47,6 +47,9 @@ vi.mock('./_lib/settle.js', async (importOriginal) => {
 })
 
 const handler = (await import('./callback/cpm/arp_frontiva/collection.js')).default
+// Loaded once at collection: an in-test importActual waits on Vitest's module
+// RPC, which a fully parallel run can stall past the 5s per-test budget.
+const realSettle = await vi.importActual<typeof import('./_lib/settle.js')>('./_lib/settle.js')
 
 const MID = '366950'
 const ORDER_REF = 'AM-EMF8G-99999999'
@@ -323,7 +326,7 @@ describe('4. an invalid SecureHash is rejected', () => {
   })
 
   it('a real settleOrder refuses a bad hash without calling Order Confirmation', async () => {
-    const actual = await vi.importActual<typeof import('./_lib/settle.js')>('./_lib/settle.js')
+    const actual = realSettle
     const verify = vi.fn()
 
     const result = await actual.settleOrder(
@@ -396,7 +399,7 @@ describe('6. a missing order reference is rejected', () => {
 
 describe('7. an invalid amount is rejected', () => {
   it('a mismatched amount becomes requires_review — never paid, never failed (§10.5)', async () => {
-    const actual = await vi.importActual<typeof import('./_lib/settle.js')>('./_lib/settle.js')
+    const actual = realSettle
 
     const result = await actual.settleOrder(
       { orderRef: ORDER_REF },
@@ -451,7 +454,7 @@ describe('8. a callback never directly marks a payment paid', () => {
   })
 
   it('a real settleOrder refuses to settle when verification is inconclusive', async () => {
-    const actual = await vi.importActual<typeof import('./_lib/settle.js')>('./_lib/settle.js')
+    const actual = realSettle
 
     const result = await actual.settleOrder({ orderRef: ORDER_REF }, CONFIG, async () => null)
 
@@ -462,7 +465,7 @@ describe('8. a callback never directly marks a payment paid', () => {
   it('a statusless confirmation is pending, NOT failed (§10.4, edge case 23)', async () => {
     // A genuine ₹81 payment was terminally marked failed because null !== 200,
     // and terminal states cannot be recovered by the running system.
-    const actual = await vi.importActual<typeof import('./_lib/settle.js')>('./_lib/settle.js')
+    const actual = realSettle
 
     const result = await actual.settleOrder(
       { orderRef: ORDER_REF },
@@ -475,7 +478,7 @@ describe('8. a callback never directly marks a payment paid', () => {
   })
 
   it('a sandbox MID refuses to settle (§10.3, edge case 22)', async () => {
-    const actual = await vi.importActual<typeof import('./_lib/settle.js')>('./_lib/settle.js')
+    const actual = realSettle
     const verify = vi.fn()
 
     const result = await actual.settleOrder(
@@ -901,7 +904,7 @@ describe('14/15. duplicate callbacks are idempotent', () => {
   })
 
   it('a terminal order short-circuits before Order Confirmation (§10.2, idempotency #1)', async () => {
-    const actual = await vi.importActual<typeof import('./_lib/settle.js')>('./_lib/settle.js')
+    const actual = realSettle
     orders.map.set(ORDER_REF, {
       ...(orders.map.get(ORDER_REF) as Record<string, unknown>),
       status: 'paid',
@@ -916,7 +919,7 @@ describe('14/15. duplicate callbacks are idempotent', () => {
   })
 
   it('requires_review is terminal, so a later callback cannot overwrite it (edge case 45)', async () => {
-    const actual = await vi.importActual<typeof import('./_lib/settle.js')>('./_lib/settle.js')
+    const actual = realSettle
     orders.map.set(ORDER_REF, {
       ...(orders.map.get(ORDER_REF) as Record<string, unknown>),
       status: 'requires_review',
@@ -929,7 +932,7 @@ describe('14/15. duplicate callbacks are idempotent', () => {
   })
 
   it('an unknown order is a stale retry or a probe, not an error', async () => {
-    const actual = await vi.importActual<typeof import('./_lib/settle.js')>('./_lib/settle.js')
+    const actual = realSettle
 
     const result = await actual.settleOrder({ orderRef: 'AM-NOPE-00000000' }, CONFIG, vi.fn())
 

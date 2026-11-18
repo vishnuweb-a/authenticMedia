@@ -77,6 +77,9 @@ const TESTER = '22222222-2222-4222-8222-222222222222'
 const OTHER = '33333333-3333-4333-8333-333333333333'
 const SESSION = 'a'.repeat(43)
 const cookie = { cookie: `__Host-am_session=${SESSION}` }
+/** An ordinary (unverified, not allowlisted) signed-in shopper: checkout now requires a session. */
+const SHOPPER_SESSION = 'b'.repeat(43)
+const shopper = { cookie: `__Host-am_session=${SHOPPER_SESSION}` }
 const body = {
   serviceSlugs: ['website-security-audit'],
   guestToken: GUEST,
@@ -112,6 +115,7 @@ beforeEach(() => {
   process.env['ISGPAY_LIVE_PRIVATE_TEST_ENABLED'] = 'true'
   process.env['ISGPAY_LIVE_TESTER_USER_IDS'] = ` ${TESTER.toUpperCase()}, not-a-uuid`
   state.sessions.set(hashToken(SESSION), { id: TESTER, email_verified_at: '2026-11-01T00:00:00Z' })
+  state.sessions.set(hashToken(SHOPPER_SESSION), { id: OTHER, email_verified_at: null })
 })
 
 describe('private live test (separate from public launch)', () => {
@@ -176,7 +180,7 @@ describe('duplicate-payment protection (live)', () => {
   })
 
   it('an unresolved earlier attempt blocks a new charge, after one fresh verification', async () => {
-    const out = await call(create, { method: 'POST', body })
+    const out = await call(create, { method: 'POST', headers: shopper, body })
     expect(out.code).toBe(409)
     expect(out.body).toEqual({ error: 'payment_unresolved' })
     expect(state.settled).toEqual(['ISG0MABCDEF0123456789ABCDEF'])
@@ -185,31 +189,31 @@ describe('duplicate-payment protection (live)', () => {
 
   it.each(['pending', 'declined_pending', 'unknown_order'])('a %s verdict is never taken to mean "failed"', async (outcome) => {
     state.settle = async () => ({ outcome })
-    expect((await call(create, { method: 'POST', body })).code).toBe(409)
+    expect((await call(create, { method: 'POST', headers: shopper, body })).code).toBe(409)
     expect(state.rpc).toHaveLength(0)
   })
 
   it('an unreadable verification (timeout / throw) still blocks', async () => {
     state.settle = async () => { throw new Error('timeout') }
-    expect((await call(create, { method: 'POST', body })).code).toBe(409)
+    expect((await call(create, { method: 'POST', headers: shopper, body })).code).toBe(409)
     expect(state.rpc).toHaveLength(0)
   })
 
   it('if the earlier attempt turns out paid, the shopper may buy again', async () => {
     state.settle = async () => ({ outcome: 'paid' })
-    expect((await call(create, { method: 'POST', body })).code).toBe(200)
+    expect((await call(create, { method: 'POST', headers: shopper, body })).code).toBe(200)
     expect(state.rpc).toHaveLength(1)
   })
 
   it('an unreadable duplicate check refuses to charge rather than guess', async () => {
     state.unresolvedThrows = true
-    expect((await call(create, { method: 'POST', body })).code).toBe(502)
+    expect((await call(create, { method: 'POST', headers: shopper, body })).code).toBe(502)
     expect(state.rpc).toHaveLength(0)
   })
 
   it('no earlier attempt: creates normally, without a status query', async () => {
     state.unresolved = null
-    expect((await call(create, { method: 'POST', body })).code).toBe(200)
+    expect((await call(create, { method: 'POST', headers: shopper, body })).code).toBe(200)
     expect(state.settled).toHaveLength(0)
   })
 
@@ -220,7 +224,7 @@ describe('duplicate-payment protection (live)', () => {
       ISGPAY_SALE_URL: 'https://sandbox.isgpay.com/ISGPay-Genius/request.action',
       ISGPAY_STATUS_URL: 'https://sandbox.isgpay.com/ISGPay-Genius/Status',
     })
-    expect((await call(create, { method: 'POST', body })).code).toBe(200)
+    expect((await call(create, { method: 'POST', headers: shopper, body })).code).toBe(200)
     expect(state.settled).toHaveLength(0)
   })
 })
@@ -248,7 +252,7 @@ describe('atomic duplicate-payment guard (Phase 3)', () => {
 
   it('two concurrent requests that both pass the pre-check: exactly one order, the other gets 409', async () => {
     databaseGuard()
-    const [a, b] = await Promise.all([call(create, { method: 'POST', body }), call(create, { method: 'POST', body })])
+    const [a, b] = await Promise.all([call(create, { method: 'POST', headers: shopper, body }), call(create, { method: 'POST', headers: shopper, body })])
     expect([a.code, b.code].sort()).toEqual([200, 409])
     expect([a, b].filter((o) => (o.body as { actionUrl?: string }).actionUrl !== undefined)).toHaveLength(1)
     expect([a, b].find((o) => o.code === 409)?.body).toEqual({ error: 'payment_unresolved' })
@@ -267,20 +271,20 @@ describe('atomic duplicate-payment guard (Phase 3)', () => {
   })
 
   it('the account comes from the server session, never the request body', async () => {
-    await call(create, { method: 'POST', body: { ...body, appUserId: TESTER, userId: TESTER } })
-    expect(state.rpc[0]?.args['p_app_user_id']).toBeNull()
+    await call(create, { method: 'POST', headers: shopper, body: { ...body, appUserId: TESTER, userId: TESTER } })
+    expect(state.rpc[0]?.args['p_app_user_id']).toBe(OTHER)
   })
 
   it('the pre-check has no time window: an attempt of any age is re-verified, and still blocks while unresolved', async () => {
     state.unresolved = { reference: EARLIER }
-    expect((await call(create, { method: 'POST', body })).code).toBe(409)
-    expect(state.unresolvedArgs).toEqual([[GUEST, null, 'production']]) // no age argument exists any more
+    expect((await call(create, { method: 'POST', headers: shopper, body })).code).toBe(409)
+    expect(state.unresolvedArgs).toEqual([[GUEST, OTHER, 'production']]) // no age argument exists any more
     expect(state.settled).toEqual([EARLIER])
   })
 
   it('a database refusal preserves the earlier order: no new hand-off, nothing else written', async () => {
     state.rpcAnswer = async () => blocked
-    const out = await call(create, { method: 'POST', body })
+    const out = await call(create, { method: 'POST', headers: shopper, body })
     expect(out.code).toBe(409)
     expect(state.rpc).toHaveLength(1) // only the refused create; no settle/cancel of the earlier row
   })
@@ -291,21 +295,26 @@ describe('atomic duplicate-payment guard (Phase 3)', () => {
     expect(state.rpc).toHaveLength(0)
     state.sessionThrows = false
     state.rpcAnswer = async () => ({ data: null, error: { code: '40P01', message: 'deadlock detected' } })
-    expect((await call(create, { method: 'POST', body })).code).toBe(502)
+    expect((await call(create, { method: 'POST', headers: shopper, body })).code).toBe(502)
   })
 
-  it('sandbox (UAT) orders are never guarded, never pass an account, and never query the session', async () => {
+  // Checkout now needs a session even in the sandbox, so the session IS read; the
+  // guard and the account still never apply to sandbox orders.
+  it('sandbox (UAT) orders are never guarded and never pass an account', async () => {
     Object.assign(process.env, {
       ISGPAY_ENV: 'uat',
       VERCEL_ENV: 'preview',
       ISGPAY_SALE_URL: 'https://sandbox.isgpay.com/ISGPay-Genius/request.action',
       ISGPAY_STATUS_URL: 'https://sandbox.isgpay.com/ISGPay-Genius/Status',
     })
-    state.sessionThrows = true
     const out = await call(create, { method: 'POST', headers: cookie, body })
     expect(out.code).toBe(200)
     expect(state.rpc[0]?.args).toMatchObject({ p_gateway_environment: 'uat', p_app_user_id: null })
     expect(state.unresolvedArgs).toHaveLength(0)
+    state.rpc.length = 0
+    state.sessionThrows = true
+    expect((await call(create, { method: 'POST', headers: cookie, body })).code).toBe(502)
+    expect(state.rpc).toHaveLength(0)
   })
 })
 

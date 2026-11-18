@@ -272,3 +272,15 @@ describe('submitToAirpay hands off in THIS tab (§7.6, §14.3)', () => {
     })
   })
 })
+
+describe('signed-out checkout', () => {
+  it('a 401 from the server asks the shopper to sign in again, never a hand-off', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ error: 'unauthenticated' }) })))
+    const result = await createAirpayPayment({ serviceSlugs: ['a'], merchant: 1, contact: { email: 'a@b.co' } })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('unauthenticated')
+      expect(result.error.message).toMatch(/sign in/i)
+    }
+  })
+})

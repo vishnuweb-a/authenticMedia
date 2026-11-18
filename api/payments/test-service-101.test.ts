@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { SIGNED_IN_COOKIE } from '../_lib/session-test-fixture.js'
 import type { ApiRequest, ApiResponse } from '../_lib/http.js'
 
 /**
@@ -173,6 +174,8 @@ const rpc = vi.hoisted(() => ({
 
 const oauth = vi.hoisted(() => ({ configs: [] as Array<{ mid: string }> }))
 
+vi.mock('../_lib/auth-store.js', async () => (await import('../_lib/session-test-fixture.js')).authStoreMock)
+
 vi.mock('../_lib/db.js', () => ({
   getServiceClient: () => ({
     rpc: async (fn: string, args: Record<string, unknown>) => {
@@ -258,7 +261,7 @@ function mockRes(): { res: ApiResponse; captured: Captured } {
 function checkout(slugs: readonly string[], merchant: 1 | 2 = 1): ApiRequest {
   return {
     method: 'POST',
-    headers: {},
+    headers: { cookie: SIGNED_IN_COOKIE },
     body: {
       serviceSlugs: slugs,
       merchant,

@@ -264,3 +264,15 @@ describe('fetchIsgpayOrderStatus', () => {
     expect((await run())?.state).toBe('requires-review')
   })
 })
+
+describe('signed-out checkout', () => {
+  it('a 401 from the server asks the shopper to sign in again, never a hand-off', async () => {
+    stubFetch(() => respond({ error: 'unauthenticated' }, 401))
+    const result = await createIsgpayPayment(INPUT)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('unauthenticated')
+      expect(result.error.message).toMatch(/sign in/i)
+    }
+  })
+})

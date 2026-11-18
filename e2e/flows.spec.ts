@@ -480,7 +480,7 @@ test.describe('accounts (custom /api/auth)', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Log out' }).click()
-    await expect(page).toHaveURL(/\/login$/)
+    await expect(page).toHaveURL(/\/$/)
     await page.goto('/account')
     await expect(page).toHaveURL(/\/login$/)
     expect(log.unmocked).toEqual([])
@@ -520,7 +520,7 @@ test.describe('accounts (custom /api/auth)', () => {
     await expect(page.getByText('ravi@example.com')).toBeVisible()
 
     await page.getByRole('button', { name: 'Log out' }).click()
-    await expect(page).toHaveURL(/\/login$/)
+    await expect(page).toHaveURL(/\/$/)
     expect(log.unmocked).toEqual([])
   })
 
@@ -550,16 +550,6 @@ test.describe('accounts (custom /api/auth)', () => {
     expect(JSON.stringify(log.createPaymentBodies[0])).not.toMatch(/e2e-user|asha@example\.com/)
   })
 
-  test('signed-out visitors are sent to login; legal pages stay public', async ({ page }) => {
-    await installMocks(page, { signedIn: false })
-    for (const path of ['/', '/services', '/about', '/faq']) {
-      await page.goto(path)
-      await expect(page).toHaveURL(/\/login$/)
-    }
-    await page.goto('/privacy')
-    await expect(page).toHaveURL(/\/privacy$/)
-  })
-
   test('a signed-out shopper returning from the gateway still sees the payment result', async ({ page }) => {
     await installMocks(page, { signedIn: false })
     await page.goto('/order-success?ref=AM-E2E-00000001&t=e2e-token')
@@ -568,5 +558,177 @@ test.describe('accounts (custom /api/auth)', () => {
     await page.goto(`/order-success?ref=${E2E_ISG_REF}&t=e2e-isg-token`)
     await expect(page).toHaveURL(/\/order-success/)
     await expect(page.getByRole('heading', { level: 1, name: 'Sandbox test payment verified' })).toBeVisible()
+  })
+})
+
+test.describe('public browsing, sign-in only at checkout', () => {
+  const PUBLIC_PATHS = [
+    '/',
+    '/services',
+    `/services/${ALL_SERVICES[0]?.id ?? ''}`,
+    '/about',
+    '/contact',
+    '/faq',
+    '/policies',
+    '/terms',
+    '/privacy',
+    '/refund',
+    '/service-delivery-policy',
+    '/grievance-redressal',
+  ]
+
+  test('a signed-out visitor can open, refresh and move between every public page', async ({ page }) => {
+    test.slow() // 24 full page loads against the dev server
+    const log = await installMocks(page, { signedIn: false })
+    for (const path of PUBLIC_PATHS) {
+      await page.goto(path)
+      await expect(page.locator('main h1').first()).toBeVisible()
+      expect(new URL(page.url()).pathname).toBe(path)
+      await page.reload()
+      await expect(page.locator('main h1').first()).toBeVisible()
+      expect(new URL(page.url()).pathname).toBe(path)
+    }
+    await page.getByRole('contentinfo').getByRole('link', { name: 'About Us' }).click()
+    await expect(page).toHaveURL(/\/about$/)
+    await page.getByRole('contentinfo').getByRole('link', { name: 'FAQs' }).click()
+    await expect(page).toHaveURL(/\/faq$/)
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toHaveCount(0)
+    expect(log.unmocked).toEqual([])
+  })
+
+  test('a signed-out shopper can fill the cart and see the total, then is asked to sign in — no payment request', async ({ page }, info) => {
+    const log = await installMocks(page, { signedIn: false, isgpay: true })
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    await page.getByRole('button', { name: 'Add Website Health Check to cart' }).click()
+    await expect(page.getByRole('button', { name: 'Cart, 2 items' })).toBeVisible()
+
+    const drawer = await openCart(page)
+    await expect(drawer.getByText('Tech Maintenance')).toBeVisible()
+    await expect(drawer.getByText('Website Health Check')).toBeVisible()
+    await expect(drawer.getByText('Total', { exact: true })).toBeVisible()
+    await expect(drawer.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible()
+    await expect(drawer.getByText('Your selected services will be saved.', { exact: false })).toBeVisible()
+    await expect(drawer.getByRole('link', { name: 'Sign In' })).toBeVisible()
+    await expect(drawer.getByRole('link', { name: 'Create Account' })).toBeVisible()
+    // The payment step itself is not offered to a signed-out shopper.
+    await expect(drawer.getByRole('button', { name: /^Pay Now,/ })).toHaveCount(0)
+    await expect(drawer.getByRole('radio')).toHaveCount(0)
+    await shot(page, info.project.name, 'checkout-sign-in')
+    expect(await seriousAxe(page, '[role="dialog"]')).toEqual([])
+
+    // Removing still works while signed out.
+    await drawer.getByRole('button', { name: 'Remove Website Health Check from cart' }).click()
+    await expect(page.getByRole('button', { name: 'Cart, 1 item' })).toBeVisible()
+
+    expect(log.createPaymentBodies).toHaveLength(0)
+    expect(log.isgpayCreateBodies).toHaveLength(0)
+    expect(log.unmocked).toEqual([])
+  })
+
+  test('sign in from checkout: back on the same page, cart intact and reopened, nothing paid until a fresh click', async ({ page }, info) => {
+    const log = await installMocks(page, { signedIn: false, isgpay: true })
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    await page.getByRole('button', { name: 'Add Website Health Check to cart' }).click()
+    await (await openCart(page)).getByRole('link', { name: 'Sign In' }).click()
+
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await page.getByLabel('Email').fill(E2E_ACCOUNT.email)
+    await page.getByLabel('Password', { exact: true }).fill(E2E_ACCOUNT.password)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+
+    // Not /account: straight back to checkout.
+    await expect(page).toHaveURL(/\/services$/)
+    const drawer = page.getByRole('dialog')
+    await expect(drawer.getByText('Tech Maintenance')).toBeVisible()
+    await expect(drawer.getByText('Website Health Check')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Cart, 2 items' })).toBeVisible()
+    // Both Airpay options and ISGPay (offered by the server) are selectable.
+    await expect(drawer.getByRole('radio')).toHaveCount(3)
+    await expect(drawer.getByRole('button', { name: /^Pay Now,/ })).toBeVisible()
+    await shot(page, info.project.name, 'checkout-after-sign-in')
+    expect(log.createPaymentBodies).toHaveLength(0)
+    expect(log.isgpayCreateBodies).toHaveLength(0)
+
+    // No loop: a refresh keeps the session and the cart, and does not reopen the drawer.
+    await page.reload()
+    await expect(page).toHaveURL(/\/services$/)
+    await expect(page.getByRole('button', { name: 'Cart, 2 items' })).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // Paying is a fresh, deliberate action through the unchanged checkout.
+    const again = await openCart(page)
+    await again.getByLabel('Email').fill('buyer@example.com')
+    await again.getByLabel('Phone').fill('9876543210')
+    await again.locator('label:has(input[type=radio][value="1"])').click()
+    await again.getByRole('checkbox').check()
+    await again.getByRole('button', { name: /^Pay Now,/ }).click()
+    await page.waitForURL(MOCK_GATEWAY)
+    expect(log.createPaymentBodies).toHaveLength(1)
+    expect(log.createPaymentBodies[0]?.serviceSlugs).toEqual(['tech-maintenance', 'website-health-check'])
+    expect(log.unmocked).toEqual([])
+  })
+
+  test('create an account from checkout: returns to the page with the cart reopened', async ({ page }) => {
+    const log = await installMocks(page, { signedIn: false })
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    await expect(page.getByRole('button', { name: 'Cart, 1 item' })).toBeVisible()
+    await page.goto('/about')
+    await (await openCart(page)).getByRole('link', { name: 'Create Account' }).click()
+
+    await expect(page).toHaveURL(/\/register$/)
+    await page.getByLabel('Full name').fill('Ravi Kumar')
+    await page.getByLabel('Email').fill('ravi@example.com')
+    await page.getByLabel('Password', { exact: true }).fill('another-pass-7')
+    await page.getByLabel('Confirm password').fill('another-pass-7')
+    await page.getByRole('button', { name: 'Create account' }).click()
+
+    await expect(page).toHaveURL(/\/about$/)
+    const drawer = page.getByRole('dialog')
+    await expect(drawer.getByText('Tech Maintenance')).toBeVisible()
+    // An unverified, just-registered account may check out.
+    await expect(drawer.getByRole('button', { name: /^Pay Now,/ })).toBeVisible()
+    await expect(drawer.getByRole('radio')).toHaveCount(2)
+    expect(log.createPaymentBodies).toHaveLength(0)
+    expect(log.unmocked).toEqual([])
+  })
+
+  test('switching from Sign in to Create an account keeps the checkout return', async ({ page }) => {
+    await installMocks(page, { signedIn: false })
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    await (await openCart(page)).getByRole('link', { name: 'Sign In' }).click()
+    await page.getByRole('link', { name: 'Create an account' }).click()
+    await expect(page).toHaveURL(/\/register$/)
+    await page.getByLabel('Full name').fill('Ravi Kumar')
+    await page.getByLabel('Email').fill('ravi@example.com')
+    await page.getByLabel('Password', { exact: true }).fill('another-pass-7')
+    await page.getByLabel('Confirm password').fill('another-pass-7')
+    await page.getByRole('button', { name: 'Create account' }).click()
+    await expect(page).toHaveURL(/\/services$/)
+    await expect(page.getByRole('dialog').getByText('Tech Maintenance')).toBeVisible()
+  })
+
+  test('a signed-in visitor goes straight to the payment step, with no extra sign-in', async ({ page }) => {
+    await installMocks(page, { signedIn: true })
+    await page.goto('/services')
+    await page.getByRole('button', { name: 'Add Tech Maintenance to cart' }).click()
+    const drawer = await openCart(page)
+    await expect(drawer.getByRole('heading', { name: 'Sign in to continue' })).toHaveCount(0)
+    await expect(drawer.getByRole('radio')).toHaveCount(2)
+    await expect(drawer.getByRole('button', { name: /^Pay Now,/ })).toBeVisible()
+  })
+
+  test('a plain sign-in (not from checkout) still lands on /account and never opens the cart', async ({ page }) => {
+    await installMocks(page, { signedIn: false })
+    await page.goto('/login')
+    await page.getByLabel('Email').fill(E2E_ACCOUNT.email)
+    await page.getByLabel('Password', { exact: true }).fill(E2E_ACCOUNT.password)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await expect(page).toHaveURL(/\/account$/)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 })

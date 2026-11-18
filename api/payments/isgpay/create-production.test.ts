@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { SIGNED_IN_COOKIE } from '../../_lib/session-test-fixture.js'
 import type { ApiRequest, ApiResponse } from '../../_lib/http.js'
 import { CONFIRMED_TEST_ENDPOINTS, installIsgpayEnv, PRODUCTION_FIXTURE_SECRETS, setProductionEnv } from '../../_lib/isgpay-test-fixture.js'
 
@@ -8,6 +9,8 @@ import { CONFIRMED_TEST_ENDPOINTS, installIsgpayEnv, PRODUCTION_FIXTURE_SECRETS,
  * behave once ISGPay confirms the production Status URL (stand-in table).
  * Synthetic credentials; no network, no database, no payment.
  */
+
+vi.mock('../../_lib/auth-store.js', async () => (await import('../../_lib/session-test-fixture.js')).authStoreMock)
 
 vi.mock('../../_lib/isgpay-config.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../_lib/isgpay-config.js')>()
@@ -70,7 +73,7 @@ beforeEach(() => {
 describe('production launch gate', () => {
   it('is closed by default: hidden, and POST creates nothing', async () => {
     expect((await call({ method: 'GET' })).body).toEqual({ available: false, testMode: true })
-    expect((await call({ method: 'POST', body })).code).toBe(404)
+    expect((await call({ method: 'POST', headers: { cookie: SIGNED_IN_COOKIE }, body })).code).toBe(404)
     expect(db.rpc).toHaveLength(0)
   })
 
@@ -105,7 +108,7 @@ describe('approved production release', () => {
   })
 
   it('creates a production-stamped order with contact details and hands off to the live Sale URL', async () => {
-    const out = await call({ method: 'POST', body })
+    const out = await call({ method: 'POST', headers: { cookie: SIGNED_IN_COOKIE }, body })
     expect(out.code).toBe(200)
     const res = out.body as Record<string, unknown>
     expect(res['testMode']).toBe(false)
@@ -123,7 +126,7 @@ describe('approved production release', () => {
 
   it('logs no credential, customer contact or EncData', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
-    const out = await call({ method: 'POST', body })
+    const out = await call({ method: 'POST', headers: { cookie: SIGNED_IN_COOKIE }, body })
     const lines = log.mock.calls.map((c) => c.join(' ')).join(' | ')
     log.mockRestore()
     expect(lines).toContain('isgpay.checkout.initiated')
@@ -133,7 +136,7 @@ describe('approved production release', () => {
   })
 
   it('the client cannot choose the environment or the gateway URL', async () => {
-    await call({ method: 'POST', body: { ...body, environment: 'uat', gatewayEnvironment: 'uat', actionUrl: 'https://evil.example/' } })
+    await call({ method: 'POST', headers: { cookie: SIGNED_IN_COOKIE }, body: { ...body, environment: 'uat', gatewayEnvironment: 'uat', actionUrl: 'https://evil.example/' } })
     expect(db.rpc[0]?.args['p_gateway_environment']).toBe('production')
   })
 })

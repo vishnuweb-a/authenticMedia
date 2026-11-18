@@ -3,8 +3,8 @@ import { createHash, randomBytes } from 'node:crypto'
 import { hash, verify } from '@node-rs/argon2'
 
 import type { AuthUserRow } from './auth-store.js'
-import { rateLimitHit } from './auth-store.js'
-import { header, type ApiRequest } from './http.js'
+import { findSessionUser, rateLimitHit } from './auth-store.js'
+import { header, type ApiRequest, type ApiResponse } from './http.js'
 
 /**
  * Shared server-side auth primitives (docs/AUTH-SETUP.md). Server only:
@@ -56,6 +56,30 @@ export function readSessionToken(req: ApiRequest): string | null {
     if (name === SESSION_COOKIE) return value && TOKEN_RE.test(value) ? value : null
   }
   return null
+}
+
+/**
+ * Checkout gate: starting a payment needs a live session (any account, verified
+ * or not). Answers 401 itself and returns false when there is none; a failed
+ * lookup fails closed with 502, never a pass. Only a gate: order ownership and
+ * payment logic are unchanged.
+ */
+export async function requireSession(req: ApiRequest, res: ApiResponse): Promise<boolean> {
+  const token = readSessionToken(req)
+  let user: AuthUserRow | null = null
+  if (token !== null) {
+    try {
+      user = await findSessionUser(hashToken(token))
+    } catch {
+      res.status(502).json({ error: 'auth_unavailable' })
+      return false
+    }
+  }
+  if (user === null) {
+    res.status(401).json({ error: 'unauthenticated' })
+    return false
+  }
+  return true
 }
 
 /**

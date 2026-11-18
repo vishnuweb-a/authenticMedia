@@ -22,7 +22,7 @@ export interface MockOptions {
   isgpay?: boolean
   /** Body of /api/payments/isgpay/status (ISG references only). */
   isgpayStatus?: Record<string, unknown>
-  /** Start signed in as the e2e account (default: signed in; the site is members-only). */
+  /** Start signed in as the e2e account (default: signed in, since paying requires an account). */
   signedIn?: boolean
 }
 
@@ -109,9 +109,15 @@ export async function installMocks(page: Page, options: MockOptions = {}): Promi
     return route.fulfill(json({ message: 'unmocked in e2e' }, 501))
   })
 
+  // Stateful stand-in for /api/auth (cookie session lives in this closure).
+  let user: typeof E2E_USER | null = options.signedIn !== false ? { ...E2E_USER } : null
+
+  // Like the real endpoints, payment creation is refused without a session.
+  // Every attempt is still logged, so a test can prove none was made.
   await page.route('**/api/payments/create', async (route, request) => {
     const body = request.postDataJSON() as Record<string, unknown>
     log.createPaymentBodies.push(body)
+    if (user === null) return route.fulfill(json({ error: 'unauthenticated' }, 401))
     if (options.createPayment === 'error') return route.fulfill(json({ error: 'x' }, 502))
     // Priced like create_airpay_order: active services only, current price.
     const slugs = (body.serviceSlugs as string[] | undefined) ?? []
@@ -142,6 +148,7 @@ export async function installMocks(page: Page, options: MockOptions = {}): Promi
     const body = request.postDataJSON() as Record<string, unknown>
     log.isgpayCreateBodies.push(body)
     if (!options.isgpay) return route.fulfill(json({ error: 'not_found' }, 404))
+    if (user === null) return route.fulfill(json({ error: 'unauthenticated' }, 401))
     const slugs = (body.serviceSlugs as string[] | undefined) ?? []
     const serverAmount = activeRows.filter((r) => slugs.includes(r.slug)).reduce((sum, r) => sum + r.price_inr, 0)
     return route.fulfill(
@@ -160,8 +167,6 @@ export async function installMocks(page: Page, options: MockOptions = {}): Promi
     route.fulfill(json({ status: 'paid', amountInr: 499, settled: true, testMode: true, ...options.isgpayStatus })),
   )
 
-  // Stateful stand-in for /api/auth (cookie session lives in this closure).
-  let user = options.signedIn !== false ? { ...E2E_USER } : null
   await page.route('**/api/auth/**', async (route, request) => {
     const action = new URL(request.url()).pathname.split('/').pop()
     const body = (request.postDataJSON() ?? {}) as Record<string, string>

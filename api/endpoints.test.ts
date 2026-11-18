@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 
+import { SIGNED_IN_COOKIE } from './_lib/session-test-fixture.js'
 import type { ApiRequest, ApiResponse } from './_lib/http.js'
 
 /**
@@ -10,6 +11,8 @@ import type { ApiRequest, ApiResponse } from './_lib/http.js'
 
 const orders = vi.hoisted(() => ({ map: new Map<string, Record<string, unknown>>() }))
 const settled = vi.hoisted(() => ({ calls: [] as string[] }))
+
+vi.mock('./_lib/auth-store.js', async () => (await import('./_lib/session-test-fixture.js')).authStoreMock)
 
 vi.mock('./_lib/db.js', () => ({
   findOrderByRef: async (ref: string) => orders.map.get(ref) ?? null,
@@ -293,7 +296,7 @@ describe('POST /api/payments/create — request validation', () => {
     await createHandler(
       {
         method: 'POST',
-        headers: {},
+        headers: { cookie: SIGNED_IN_COOKIE },
         body: { serviceSlugs: ['some-service'] },
       } as ApiRequest,
       res,
@@ -308,7 +311,7 @@ describe('POST /api/payments/create — request validation', () => {
     await createHandler(
       {
         method: 'POST',
-        headers: {},
+        headers: { cookie: SIGNED_IN_COOKIE },
         body: { serviceSlugs: ['some-service'], guestToken: 'not-a-uuid' },
       } as ApiRequest,
       res,
@@ -322,7 +325,7 @@ describe('POST /api/payments/create — request validation', () => {
     await createHandler(
       {
         method: 'POST',
-        headers: {},
+        headers: { cookie: SIGNED_IN_COOKIE },
         body: {
           serviceSlugs: [],
           guestToken: '11111111-1111-4111-8111-111111111111',

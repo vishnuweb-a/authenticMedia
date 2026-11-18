@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { SIGNED_IN_COOKIE } from './_lib/session-test-fixture.js'
 import type { ApiRequest, ApiResponse } from './_lib/http.js'
 
 /**
@@ -24,6 +25,8 @@ const rpc = vi.hoisted(() => ({
     error: null as unknown,
   },
 }))
+
+vi.mock('./_lib/auth-store.js', async () => (await import('./_lib/session-test-fixture.js')).authStoreMock)
 
 vi.mock('./_lib/db.js', () => ({
   getServiceClient: () => ({
@@ -76,7 +79,7 @@ function mockRes(): { res: ApiResponse; captured: Captured } {
 function post(body: unknown): ApiRequest {
   const merged =
     body !== null && typeof body === 'object' ? { merchant: 1, ...(body as object) } : body
-  return { method: 'POST', headers: {}, body: merged } as ApiRequest
+  return { method: 'POST', headers: { cookie: SIGNED_IN_COOKIE }, body: merged } as ApiRequest
 }
 
 const VALID = {

@@ -60,6 +60,8 @@ export interface OrderStatusResult {
 }
 
 const UNAVAILABLE = 'Payments are unavailable right now. Please try again shortly.'
+/** The payment API refused the request: checkout needs a signed-in account. */
+export const SIGNED_OUT = 'Your session has ended. Please sign in again to continue to payment.'
 
 /**
  * Which Airpay payment option the shopper chose at checkout.
@@ -112,6 +114,7 @@ export async function createAirpayPayment(
       }),
     })
 
+    if (response.status === 401) return err<AirpayHandoff>('unauthenticated', SIGNED_OUT)
     if (!response.ok) {
       return err<AirpayHandoff>('create_failed', UNAVAILABLE)
     }

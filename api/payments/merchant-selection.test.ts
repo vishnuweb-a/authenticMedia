@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { SIGNED_IN_COOKIE } from '../_lib/session-test-fixture.js'
 import type { ApiRequest, ApiResponse } from '../_lib/http.js'
 
 /**
@@ -30,6 +31,8 @@ const rpc = vi.hoisted(() => ({
 }))
 
 const oauth = vi.hoisted(() => ({ configs: [] as Array<{ mid: string; merchant: number }> }))
+
+vi.mock('../_lib/auth-store.js', async () => (await import('../_lib/session-test-fixture.js')).authStoreMock)
 
 vi.mock('../_lib/db.js', () => ({
   getServiceClient: () => ({
@@ -102,7 +105,7 @@ function mockRes(): { res: ApiResponse; captured: Captured } {
 const CONTACT = { email: 'shopper@example.com', firstName: 'Ada', lastName: 'L' }
 
 function post(body: Record<string, unknown>): ApiRequest {
-  return { method: 'POST', headers: {}, body } as ApiRequest
+  return { method: 'POST', headers: { cookie: SIGNED_IN_COOKIE }, body } as ApiRequest
 }
 
 /** A well-formed checkout for the named merchant, plus anything hostile. */

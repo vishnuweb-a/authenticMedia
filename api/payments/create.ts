@@ -1,5 +1,6 @@
 import { buildSignedEnvelope } from '../_lib/airpay-crypto.js'
 import { getAccessToken } from '../_lib/airpay.js'
+import { requireSession } from '../_lib/auth.js'
 import { hasContact, normaliseContact } from '../_lib/contact.js'
 import { HOSTED_PAYMENT_URL, loadAirpayConfig, parseMerchantSelection } from '../_lib/config.js'
 import { getServiceClient } from '../_lib/db.js'
@@ -76,6 +77,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     res.status(405).json({ error: 'method_not_allowed' })
     return
   }
+
+  // Checkout needs a signed-in account; refused before any order or gateway call.
+  if (!(await requireSession(req, res))) return
 
   const body = parseBody(req.body)
   const slugs = Array.isArray(body?.serviceSlugs)

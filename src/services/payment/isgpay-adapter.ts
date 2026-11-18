@@ -1,7 +1,7 @@
 import { getGuestToken } from '@/lib/supabase'
 import { err, ok } from '@/services/result'
 import type { ServiceResult } from '@/services/result'
-import { submitToAirpay, type OrderPaymentState, type OrderStatusResult } from './airpay-adapter'
+import { SIGNED_OUT, submitToAirpay, type OrderPaymentState, type OrderStatusResult } from './airpay-adapter'
 
 /**
  * The ISGPay frontend seam (UAT sandbox or production, as the SERVER decides).
@@ -78,6 +78,7 @@ export async function createIsgpayPayment(
     })
     // An earlier live attempt is still unresolved: never start a second charge.
     if (response.status === 409) return err<IsgpayHandoff>('payment_unresolved', UNRESOLVED)
+    if (response.status === 401) return err<IsgpayHandoff>('unauthenticated', SIGNED_OUT)
     if (!response.ok) return err<IsgpayHandoff>('create_failed', UNAVAILABLE)
 
     const data = (await response.json()) as Partial<Record<keyof IsgpayHandoff, unknown>>

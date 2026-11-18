@@ -1,13 +1,16 @@
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
-import { useCart } from '@/stores'
+import type { AuthRouteState } from '@/features/auth'
+import { useAuth, useCart } from '@/stores'
 import { CartEmptyState } from './cart-empty-state'
 import { CheckoutContactFields } from './checkout-contact-fields'
 import { CheckoutMerchantChoice } from './checkout-merchant-choice'
 import { CartLineItem } from './cart-line-item'
 import { CartSummary } from './cart-summary'
 import { CheckoutAwaitingPanel } from './checkout-awaiting-panel'
+import { CheckoutSignInPrompt } from './checkout-sign-in-prompt'
 import { useCheckout } from '../hooks/use-checkout'
 import { useDialogBehavior } from '@/hooks'
 
@@ -24,7 +27,14 @@ import { useDialogBehavior } from '@/hooks'
  * by the shared cart store — it holds no cart state of its own.
  */
 export function CartDrawer() {
-  const { items, total, itemCount, isOpen, removeItem, closeCart } = useCart()
+  const { items, total, itemCount, isOpen, removeItem, openCart, closeCart } = useCart()
+  // Browsing and the cart are public; starting a payment needs an account. The
+  // payment API refuses an unauthenticated request whatever this UI shows.
+  const { user } = useAuth()
+  const signedIn = user !== null
+  const location = useLocation()
+  const navigate = useNavigate()
+  const resumeCheckout = (location.state as AuthRouteState | null)?.resumeCheckout === true
   const {
     status,
     error,
@@ -57,6 +67,15 @@ export function CartDrawer() {
   useEffect(() => {
     if (!isOpen && !awaiting) reset()
   }, [isOpen, awaiting, reset])
+
+  // Back from /login or /register after starting checkout: reopen the cart once
+  // so the shopper can review and pay. Only opens it — paying is a fresh click.
+  // The flag is cleared so a refresh or Back never reopens it again.
+  useEffect(() => {
+    if (!resumeCheckout || !signedIn) return
+    openCart()
+    navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: null })
+  }, [resumeCheckout, signedIn, openCart, navigate, location.pathname, location.search, location.hash])
 
   if (!isOpen) return null
 
@@ -114,26 +133,30 @@ export function CartDrawer() {
                 ))}
               </ul>
 
-              {/* Exactly one gateway takes this payment, and the shopper
-                  chooses which (§2.4): an Airpay merchant index, or the ISGPay
-                  sandbox when the server offers it to this browser. No MID or
-                  credential is in the browser to choose from. */}
-              <CheckoutMerchantChoice
-                value={gateway}
-                isgpayAvailable={isgpayAvailable}
-                isgpayTestMode={isgpayTestMode}
-                disabled={status === 'pending'}
-                onChange={setGateway}
-              />
+              {signedIn && (
+                <>
+                  {/* Exactly one gateway takes this payment, and the shopper
+                      chooses which (§2.4): an Airpay merchant index, or the ISGPay
+                      sandbox when the server offers it to this browser. No MID or
+                      credential is in the browser to choose from. */}
+                  <CheckoutMerchantChoice
+                    value={gateway}
+                    isgpayAvailable={isgpayAvailable}
+                    isgpayTestMode={isgpayTestMode}
+                    disabled={status === 'pending'}
+                    onChange={setGateway}
+                  />
 
-              {/* Airpay refuses a payment with neither an email nor a phone
-                  number, so one is collected before the handoff (§7.3). */}
-              <CheckoutContactFields
-                values={contact}
-                errors={contactErrors}
-                disabled={status === 'pending'}
-                onChange={setContactValue}
-              />
+                  {/* Airpay refuses a payment with neither an email nor a phone
+                      number, so one is collected before the handoff (§7.3). */}
+                  <CheckoutContactFields
+                    values={contact}
+                    errors={contactErrors}
+                    disabled={status === 'pending'}
+                    onChange={setContactValue}
+                  />
+                </>
+              )}
             </div>
           )}
         </div>
@@ -141,7 +164,10 @@ export function CartDrawer() {
         {/* The floor is meaningless with nothing to pay for, and a second Pay
             button while a payment is already open in another window is how a
             shopper ends up paying twice. */}
-        {itemCount > 0 && !awaiting && (
+        {itemCount > 0 && !awaiting && !signedIn && (
+          <CheckoutSignInPrompt total={total} onNavigate={closeCart} />
+        )}
+        {itemCount > 0 && !awaiting && signedIn && (
           <CartSummary
             gateway={gateway.kind}
             total={total}

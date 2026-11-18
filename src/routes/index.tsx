@@ -33,6 +33,14 @@ export const router = createBrowserRouter([
   {
     element: <AppShell />,
     children: [
+      // The website is public. Sign-in is required only to start a payment (the
+      // cart's checkout step, enforced by the payment API) and for /account.
+      { path: ROUTES.home, element: <HomePage /> },
+      { path: ROUTES.services, element: <ServicesPage /> },
+      { path: `${ROUTES.services}/:slug`, element: <ServiceDetailPage /> },
+      { path: ROUTES.about, element: <AboutPage /> },
+      { path: ROUTES.contact, element: <ContactPage /> },
+      { path: ROUTES.faq, element: <FaqPage /> },
       { path: ROUTES.terms, element: <LegalPageLayout doc={TERMS} /> },
       { path: ROUTES.privacy, element: <LegalPageLayout doc={PRIVACY} /> },
       { path: ROUTES.refund, element: <LegalPageLayout doc={REFUND} /> },
@@ -53,19 +61,10 @@ export const router = createBrowserRouter([
             : []),
         ],
       },
-      // Site content is members-only. Legal/policy pages above stay public (gateway
-      // compliance). UX gate only — the API enforces real access.
+      // Personal account data. UX gate only — the API enforces real access.
       {
         element: <RequireAuth />,
-        children: [
-          { path: ROUTES.home, element: <HomePage /> },
-          { path: ROUTES.services, element: <ServicesPage /> },
-          { path: `${ROUTES.services}/:slug`, element: <ServiceDetailPage /> },
-          { path: ROUTES.about, element: <AboutPage /> },
-          { path: ROUTES.contact, element: <ContactPage /> },
-          { path: ROUTES.faq, element: <FaqPage /> },
-          { path: ROUTES.account, element: <AccountPage /> },
-        ],
+        children: [{ path: ROUTES.account, element: <AccountPage /> }],
       },
       { path: '*', element: <NotFoundPage /> },
     ],

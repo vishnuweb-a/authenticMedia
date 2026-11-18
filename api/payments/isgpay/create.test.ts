@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { SIGNED_IN_COOKIE } from '../../_lib/session-test-fixture.js'
 import type { ApiRequest, ApiResponse } from '../../_lib/http.js'
 import { loadIsgpayConfig } from '../../_lib/isgpay-config.js'
 import { openEnvelope } from '../../_lib/isgpay-crypto.js'
@@ -17,6 +18,8 @@ const db = vi.hoisted(() => ({
   rpc: [] as Array<{ fn: string; args: Record<string, unknown> }>,
   lookups: 0,
 }))
+
+vi.mock('../../_lib/auth-store.js', async () => (await import('../../_lib/session-test-fixture.js')).authStoreMock)
 
 vi.mock('../../_lib/db.js', () => ({
   getServiceClient: () => ({
@@ -67,7 +70,7 @@ async function call(r: Partial<ApiRequest>) {
   return out
 }
 
-const post = (body: Record<string, unknown>, headers: Record<string, string> = {}) =>
+const post = (body: Record<string, unknown>, headers: Record<string, string> = { cookie: SIGNED_IN_COOKIE }) =>
   call({ method: 'POST', headers, body })
 
 const validBody = (overrides: Record<string, unknown> = {}) => ({

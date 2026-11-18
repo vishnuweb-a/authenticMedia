@@ -1,4 +1,4 @@
-import { hashToken, readSessionToken } from '../../_lib/auth.js'
+import { hashToken, readSessionToken, requireSession } from '../../_lib/auth.js'
 import { findSessionUser } from '../../_lib/auth-store.js'
 import { hasContact, normaliseContact } from '../../_lib/contact.js'
 import { findUnresolvedIsgpayOrder, getServiceClient } from '../../_lib/db.js'
@@ -90,6 +90,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     res.status(404).json({ error: 'not_found' })
     return
   }
+  // Checkout needs a signed-in account; GET availability above stays public.
+  if (!(await requireSession(req, res))) return
 
   const body = parseBody(req.body)
   const slugs = parseSlugs(body?.['serviceSlugs'])

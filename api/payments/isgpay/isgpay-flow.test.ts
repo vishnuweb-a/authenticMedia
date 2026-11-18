@@ -373,13 +373,15 @@ describe('environment separation (UAT <-> production)', () => {
     expect(db.rpc[0]?.args['p_gateway_environment']).toBe('uat')
   })
 
-  it('with the real endpoint table, production handlers fail closed and leak nothing', async () => {
+  it('with the real endpoint table, a production callback alone settles nothing when the Status Query is unavailable', async () => {
     const config = productionConfig()
+    process.env['VERCEL_ENV'] = 'production'
     db.orders.set(REF, order({ gatewayEnvironment: 'production' }))
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'))
     const { res, out } = mockRes()
     await callback(req({ method: 'POST', body: { EncData: envelope(config) } }), res)
-    expect(out.code).toBe(503) // production Status URL unconfirmed → config refuses to load
-    expect(db.rpc).toHaveLength(0)
+    fetchSpy.mockRestore()
+    expect(db.rpc.filter((c) => c.fn === 'settle_isgpay_order')).toHaveLength(0)
     for (const secret of PRODUCTION_FIXTURE_SECRETS) expect(JSON.stringify(out)).not.toContain(secret)
   })
 })

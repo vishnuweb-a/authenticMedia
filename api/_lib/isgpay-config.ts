@@ -33,10 +33,10 @@ export interface IsgpayEndpoints {
  * and nothing from a request ever selects an environment.
  *
  * Production Sale is the host recorded in the ISGPay production-migration
- * guide (PROPOSED, pending merchant confirmation). Production Status is null:
- * its URL and transport are unconfirmed, and settlement depends on it, so
- * ISGPAY_ENV=production cannot load until a reviewed code change sets it.
- * See docs/ISGPAY-PRODUCTION-READINESS.md.
+ * guide. Production Status is the URL supplied by the project owner (Phase 4);
+ * the provider's live response format and transport are NOT yet validated, and
+ * no real Status Query has been made. A null status still fails that env closed.
+ * See docs/ISGPAY-PRODUCTION-PHASE4.md.
  */
 export const ISGPAY_ENDPOINTS: Readonly<Record<IsgpayEnv, IsgpayEndpoints>> = {
   uat: {
@@ -45,7 +45,7 @@ export const ISGPAY_ENDPOINTS: Readonly<Record<IsgpayEnv, IsgpayEndpoints>> = {
   },
   production: {
     sale: 'https://isgpay.com/ISGPay-Genius/request.action',
-    status: null,
+    status: 'https://isgpay.com/ISGPay-Genius/Status',
   },
 }
 

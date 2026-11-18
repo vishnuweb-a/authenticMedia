@@ -2,7 +2,7 @@ import { inspect } from 'node:util'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ConfigError, ISGPAY_ENDPOINTS, loadIsgpayConfig } from './isgpay-config.js'
+import { ISGPAY_ENDPOINTS, loadIsgpayConfig } from './isgpay-config.js'
 import { buildSaleRequest } from './isgpay.js'
 import { decryptEncData, parseEncData } from './isgpay-crypto.js'
 import {
@@ -34,17 +34,37 @@ describe('production endpoint table', () => {
     })
   })
 
-  it('records the proposed production Sale host and NO production Status URL (unconfirmed)', () => {
-    expect(ISGPAY_ENDPOINTS.production.sale).toBe('https://isgpay.com/ISGPay-Genius/request.action')
-    expect(ISGPAY_ENDPOINTS.production.status).toBeNull()
+  it('pins the production Sale and Status URLs exactly', () => {
+    expect(ISGPAY_ENDPOINTS.production).toEqual({
+      sale: 'https://isgpay.com/ISGPay-Genius/request.action',
+      status: 'https://isgpay.com/ISGPay-Genius/Status',
+    })
+  })
+
+  it('never shares an endpoint between environments', () => {
+    const uat = Object.values(ISGPAY_ENDPOINTS.uat)
+    for (const url of Object.values(ISGPAY_ENDPOINTS.production)) expect(uat).not.toContain(url)
+  })
+
+  it('a null Status endpoint still fails that environment closed', () => {
+    setProductionEnv()
+    const table = { ...ISGPAY_ENDPOINTS, production: { sale: ISGPAY_ENDPOINTS.production.sale, status: null } }
+    expect(() => loadIsgpayConfig(table)).toThrow(/Status endpoint is not confirmed/)
   })
 })
 
 describe('ISGPAY_ENV=production', () => {
-  it('fails closed with the real table: the Status endpoint is unconfirmed', () => {
+  it('loads with the real endpoint table on Vercel Production, with checkout still disabled', () => {
     setProductionEnv()
-    expect(() => loadIsgpayConfig()).toThrow(ConfigError)
-    expect(() => loadIsgpayConfig()).toThrow(/Status endpoint is not confirmed/)
+    const config = loadIsgpayConfig()
+    expect(config.statusUrl).toBe('https://isgpay.com/ISGPay-Genius/Status')
+    expect(config.enabled).toBe(false)
+  })
+
+  it('rejects UAT endpoints under production and production endpoints under UAT', () => {
+    setProductionEnv()
+    process.env['ISGPAY_STATUS_URL'] = 'https://sandbox.isgpay.com/ISGPay-Genius/Status'
+    expect(() => loadIsgpayConfig()).toThrow('ISGPAY_STATUS_URL')
   })
 
   it('is accepted when complete and provider-confirmed', () => {
@@ -71,6 +91,13 @@ describe('ISGPAY_ENV=production', () => {
     ['ISGPAY_SALE_URL', 'https://isgpay.com/ISGPay-Genius/other.action'],
     ['ISGPAY_SALE_URL', 'https://isgpay.com.evil.example/ISGPay-Genius/request.action'],
     ['ISGPAY_SALE_URL', 'https://www.isgpay.com/ISGPay-Genius/request.action'],
+    ['ISGPAY_STATUS_URL', 'https://isgpay.com/ISGPay-Genius/Status?x=1'],
+    ['ISGPAY_STATUS_URL', 'https://isgpay.com/ISGPay-Genius/Status#f'],
+    ['ISGPAY_STATUS_URL', 'https://isgpay.com/ISGPay-Genius/Status/'],
+    ['ISGPAY_STATUS_URL', 'https://isgpay.com/ISGPay-Genius/status'],
+    ['ISGPAY_STATUS_URL', 'http://isgpay.com/ISGPay-Genius/Status'],
+    ['ISGPAY_STATUS_URL', 'https://isgpay.com.evil.example/ISGPay-Genius/Status'],
+    ['ISGPAY_STATUS_URL', 'https://isgpay.com/ISGPay-Genius/request.action'],
   ])('rejects sandbox or non-approved %s=%s', (name, value) => {
     setProductionEnv()
     process.env[name] = value

@@ -45,10 +45,7 @@ export function installIsgpayEnv(): void {
   })
 }
 
-/**
- * TEST-ONLY stand-in for a provider-confirmed production Status URL. The real
- * table keeps production status null (unconfirmed) until ISGPay confirms it.
- */
+/** Kept for existing suites; since Phase 4 it equals the real table. */
 export const CONFIRMED_TEST_ENDPOINTS: Readonly<Record<IsgpayEnv, IsgpayEndpoints>> = {
   ...ISGPAY_ENDPOINTS,
   production: { sale: ISGPAY_ENDPOINTS.production.sale, status: 'https://isgpay.com/ISGPay-Genius/Status' },
